@@ -27,14 +27,10 @@ jobs:
 
       - name: Initialize Complete Flutter Android Project
         run: |
-          # สำรองโค้ดหน้าจอหลัก main.dart ของเราไว้
           cp lib/main.dart /tmp/my_main.dart
-          
-          # ลบไฟล์ชั่วคราวออกเพื่อสร้างโครงสร้าง Android มาตรฐานแบบครบวงจร
           rm -rf android lib pubspec.yaml
           flutter create --org com.dobbystudio --project-name dobby_app .
-          
-          # นำโค้ด main.dart ของเรากลับมาใส่
+          flutter pub add webview_flutter
           cp /tmp/my_main.dart lib/main.dart
 
       - name: Build APK
