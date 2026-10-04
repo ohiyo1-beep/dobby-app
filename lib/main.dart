@@ -20,14 +20,15 @@ class VideoStudioApp extends StatefulWidget {
 }
 
 class _VideoStudioAppState extends State<VideoStudioApp> {
-  File? _selectedImage;
+  File? _productImage;
+  File? _modelImage;
   final ImagePicker _picker = ImagePicker();
-  final TextEditingController _notesCtrl = TextEditingController();
+  final TextEditingController _notesCtrl = TextEditingController(text: "กล้องวงจรปิด CCTV ไร้สาย");
 
-  String _productSize = "normal";
-  String _background = "market";
-  String _duration = "10s";
-  String _tenSecFocus = "persuade";
+  String _modelType = "female"; // female, male
+  String _productSize = "normal"; // normal, large
+  String _background = "home"; // home, market, mall, factory
+  String _duration = "10s"; // 10s, 20-30s
 
   late final WebViewController _webController;
   bool _isLoadingWeb = true;
@@ -51,53 +52,61 @@ class _VideoStudioAppState extends State<VideoStudioApp> {
       ..loadRequest(Uri.parse('https://www.meta.ai'));
   }
 
-  Future<void> _pickImage() async {
+  Future<void> _pickImage(bool isProduct) async {
     final XFile? picked = await _picker.pickImage(source: ImageSource.gallery);
     if (picked != null) {
       setState(() {
-        _selectedImage = File(picked.path);
+        if (isProduct) {
+          _productImage = File(picked.path);
+        } else {
+          _modelImage = File(picked.path);
+        }
       });
     }
   }
 
-  String _buildCurrentPrompt() {
-    final note = _notesCtrl.text.trim();
-    final pDesc = note.isNotEmpty ? "product ($note) exactly matching reference image" : "product exactly matching reference image";
-
+  // สร้าง Prompt สเต็ปที่ 1: เจนรูปภาพนิ่ง 9:16 ล็อกหน้าคน + หน้าสินค้า
+  String _buildImagePrompt() {
+    final pName = _notesCtrl.text.trim().isEmpty ? "product" : _notesCtrl.text.trim();
+    final personDesc = _modelType == "female" ? "a beautiful young Thai female creator" : "a handsome young Thai male creator";
+    
     String bgDesc = "";
-    if (_background == "market") {
-      bgDesc = "a vibrant outdoor night market with ambient warm lights";
+    if (_background == "home") {
+      bgDesc = "a cozy modern living room interior with warm natural lighting";
+    } else if (_background == "market") {
+      bgDesc = "a bustling outdoor night market with ambient warm neon lights";
     } else if (_background == "mall") {
-      bgDesc = "a modern upscale shopping mall interior";
+      bgDesc = "a luxurious modern department store background";
     } else {
-      bgDesc = "an authentic manufacturing factory with operating conveyor belts";
+      bgDesc = "an authentic manufacturing factory setting";
     }
 
-    String vidAction = "";
-    String dialogue = "";
+    String action = (_productSize == "normal")
+        ? "securely holding and showcasing the $pName at chest level toward the camera"
+        : "standing beside the large $pName, gently pointing at its key features and details";
 
-    if (_duration == "10s") {
-      if (_tenSecFocus == "persuade") {
-        dialogue = "ทุกคน ตัวนี้เด่นเรื่องความทนทาน ใช้งานสะดวก น้ำหนักเบา ตอบโจทย์ชีวิตประจำวันมากครับ!";
-        vidAction = (_productSize == "normal")
-            ? "holding and turning the $pDesc to showcase its texture and details"
-            : "standing beside and pointing closely at key materials of the large $pDesc";
-      } else {
-        dialogue = "โปรคุ้มมากรอบนี้ ใครมองหาอยู่รีบกดลงตะกร้าสีเหลืองซ้ายมือด่วนเลย ช้าหมดอดนะครับ!";
-        vidAction = "smiling confidently and pointing hand down toward the bottom-left basket";
-      }
-      return "Generate a photorealistic 10-second UGC review video of creator $vidAction in $bgDesc. Gaze: Genuine eye contact with camera. Dialogue: Character naturally speaks: '$dialogue' with realistic Thai lip-sync. 35mm lens.";
-    } else {
-      dialogue = "ทุกคน เจอปัญหานี้อยู่ใช่ไหม? ตัวนี้ตอบโจทย์มาก วัสดุดี ทนทาน คุ้มค่าสุดๆ รีบกดสั่งในตะกร้าซ้ายมือก่อนของหมดนะครับ!";
-      vidAction = (_productSize == "normal")
-          ? "holding the $pDesc at chest level, inspecting details, then pointing to bottom-left corner"
-          : "standing beside the large $pDesc, caressing surface to show build quality, then gesturing to bottom-left corner";
-      return "Generate a seamless photorealistic UGC video (20-30s) featuring creator $vidAction in $bgDesc. Sequence: [Hook] engaging camera gaze, [Value] showcasing craftsmanship, [CTA] smiling and pointing to shopping basket. Dialogue: Character naturally speaks: '$dialogue' synced with accurate Thai lip-sync. 35mm lens.";
-    }
+    return "A hyper-realistic commercial portrait photography, vertical 9:16 aspect ratio (1080x1920). "
+        "Featuring $personDesc (matching the facial identity of the reference person) $action. "
+        "The product design, colors, and textures strictly and accurately replicate the reference product image. "
+        "Background: $bgDesc. True-to-life scale, pristine product details, 50mm lens, 8k resolution, crisp photorealism.";
   }
 
-  void _sendAutoToMetaAI() {
-    final prompt = _buildCurrentPrompt();
+  // สร้าง Prompt สเต็ปที่ 2: Animate รูปภาพนิ่งให้เป็นวิดีโอ 9:16 พร้อมเสียงพูด
+  String _buildAnimatePrompt() {
+    String dialogue = "";
+    if (_duration == "10s") {
+      dialogue = "ทุกคน ตัวนี้ตอบโจทย์มาก ฟังก์ชันครบ ใช้งานง่าย คุ้มค่าสุดๆ รีบกดสั่งในตะกร้าซ้ายมือก่อนของหมดนะครับ!";
+    } else {
+      dialogue = "เจอปัญหานี้อยู่ใช่ไหม? บอกเลยว่าตัวนี้ของจริง ดีไซน์สวย ใช้งานทนทาน คุ้มราคาแน่นอน กดสั่งในตะกร้าเหลืองด่วนเลยครับ!";
+    }
+
+    return "Animate this 9:16 vertical image into a smooth photorealistic video. "
+        "Keep the exact same vertical 9:16 aspect ratio, preserve creator face and accurate product design. "
+        "Action: The creator makes confident, friendly eye contact with camera, interacts naturally with the product, smiles, and points toward the bottom-left shopping basket. "
+        "Dialogue: The creator naturally speaks with realistic Thai lip-sync: '$dialogue'. Natural realistic motion, cinematic lighting.";
+  }
+
+  void _injectToMetaAI(String prompt, String successMsg) {
     final safePrompt = prompt.replaceAll(r'\', r'\\').replaceAll("'", r"\'").replaceAll('\n', r'\n');
 
     final jsCode = """
@@ -124,8 +133,9 @@ class _VideoStudioAppState extends State<VideoStudioApp> {
     """;
 
     _webController.runJavaScript(jsCode);
+    Clipboard.setData(ClipboardData(text: prompt));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("🚀 ส่งคำสั่งเข้า Meta AI อัตโนมัติเรียบร้อย!")),
+      SnackBar(content: Text("$successMsg (พร้อมคัดลอกลงคลิปบอร์ดแล้ว)")),
     );
   }
 
@@ -133,7 +143,7 @@ class _VideoStudioAppState extends State<VideoStudioApp> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Dobby Studio (Image Upload)"),
+        title: const Text("Dobby Studio (Face & Product)"),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
       ),
@@ -141,85 +151,111 @@ class _VideoStudioAppState extends State<VideoStudioApp> {
         children: [
           ExpansionTile(
             initiallyExpanded: true,
-            title: const Text("⚙️ ข้อมูลสินค้า & ภาพอ้างอิง", style: TextStyle(fontWeight: FontWeight.bold)),
+            title: const Text("⚙️ กำหนดสินค้า & คนรีวิว (สเกล 9:16)", style: TextStyle(fontWeight: FontWeight.bold)),
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 child: Column(
                   children: [
-                    // ส่วนอัปโหลดรูปภาพ
-                    GestureDetector(
-                      onTap: _pickImage,
-                      child: Container(
-                        height: 120,
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.indigo.shade200, width: 2),
-                          borderRadius: BorderRadius.circular(10),
-                          color: Colors.grey.shade50,
-                        ),
-                        child: _selectedImage == null
-                            ? Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: const [
-                                  Icon(Icons.add_photo_alternate_rounded, size: 40, color: Colors.indigo),
-                                  SizedBox(height: 6),
-                                  Text("แตะที่นี่เพื่ออัปโหลดรูปสินค้า (จากแคปหน้าจอ/คลังภาพ)",
-                                      style: TextStyle(color: Colors.indigo, fontWeight: FontWeight.w600, fontSize: 13)),
-                                ],
-                              )
-                            : ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image.file(_selectedImage!, fit: BoxFit.contain),
-                              ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-
-                    // ช่องใส่ข้อความเสริม (ไม่บังคับ)
-                    TextField(
-                      controller: _notesCtrl,
-                      decoration: const InputDecoration(
-                        labelText: "รายละเอียดเพิ่มเติม (ถ้ามี เช่น กางเกงบูทสีเหลือง)",
-                        isDense: true,
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-
-                    // ขนาดสินค้า
+                    // ส่วนอัปโหลด 2 รูปคู่กัน
                     Row(
                       children: [
+                        // อัปโหลดรูปสินค้า
                         Expanded(
-                          child: RadioListTile<String>(
-                            title: const Text("ขนาดปกติ (ถือ)", style: TextStyle(fontSize: 13)),
-                            value: "normal",
-                            groupValue: _productSize,
-                            contentPadding: EdgeInsets.zero,
-                            onChanged: (val) => setState(() => _productSize = val!),
+                          child: GestureDetector(
+                            onTap: () => _pickImage(true),
+                            child: Container(
+                              height: 100,
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.blue.shade300, width: 1.5),
+                                borderRadius: BorderRadius.circular(8),
+                                color: Colors.blue.shade50,
+                              ),
+                              child: _productImage == null
+                                  ? Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: const [
+                                        Icon(Icons.inventory_2_outlined, color: Colors.blue, size: 28),
+                                        SizedBox(height: 4),
+                                        Text("📦 1. รูปสินค้า", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue)),
+                                        Text("(แคปจาก Shopee)", style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                      ],
+                                    )
+                                  : ClipRRect(
+                                      borderRadius: BorderRadius.circular(7),
+                                      child: Image.file(_productImage!, fit: BoxFit.cover),
+                                    ),
+                            ),
                           ),
                         ),
+                        const SizedBox(width: 10),
+                        // อัปโหลดรูปนางแบบ/นายแบบ
                         Expanded(
-                          child: RadioListTile<String>(
-                            title: const Text("ขนาดใหญ่ (ชี้/ลูบ)", style: TextStyle(fontSize: 13)),
-                            value: "large",
-                            groupValue: _productSize,
-                            contentPadding: EdgeInsets.zero,
-                            onChanged: (val) => setState(() => _productSize = val!),
+                          child: GestureDetector(
+                            onTap: () => _pickImage(false),
+                            child: Container(
+                              height: 100,
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.purple.shade300, width: 1.5),
+                                borderRadius: BorderRadius.circular(8),
+                                color: Colors.purple.shade50,
+                              ),
+                              child: _modelImage == null
+                                  ? Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: const [
+                                        Icon(Icons.person_outline, color: Colors.purple, size: 28),
+                                        SizedBox(height: 4),
+                                        Text("👤 2. นางแบบ/นายแบบ", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.purple)),
+                                        Text("(แนบรูปหน้าคน)", style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                      ],
+                                    )
+                                  : ClipRRect(
+                                      borderRadius: BorderRadius.circular(7),
+                                      child: Image.file(_modelImage!, fit: BoxFit.cover),
+                                    ),
+                            ),
                           ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 8),
 
-                    // ฉากหลัง & ความยาวคลิป
+                    // ช่องใส่ชื่อสินค้า
+                    TextField(
+                      controller: _notesCtrl,
+                      decoration: const InputDecoration(
+                        labelText: "ชื่อสินค้า / รายละเอียด",
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // เลือกเพศครีเอเตอร์ & ฉากหลัง
                     Row(
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
+                            value: _modelType,
+                            isDense: true,
+                            decoration: const InputDecoration(border: OutlineInputBorder(), labelText: "เพศครีเอเตอร์", contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+                            items: const [
+                              DropdownMenuItem(value: "female", child: Text("นางแบบ (หญิง)")),
+                              DropdownMenuItem(value: "male", child: Text("นายแบบ (ชาย)")),
+                            ],
+                            onChanged: (val) => setState(() => _modelType = val!),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
                             value: _background,
                             isDense: true,
-                            decoration: const InputDecoration(border: OutlineInputBorder(), labelText: "ฉากหลัง"),
+                            decoration: const InputDecoration(border: OutlineInputBorder(), labelText: "ฉากหลัง", contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
                             items: const [
+                              DropdownMenuItem(value: "home", child: Text("ในห้อง/บ้าน")),
                               DropdownMenuItem(value: "market", child: Text("ตลาดนัด")),
                               DropdownMenuItem(value: "mall", child: Text("ห้างสรรพสินค้า")),
                               DropdownMenuItem(value: "factory", child: Text("โรงงาน")),
@@ -227,35 +263,39 @@ class _VideoStudioAppState extends State<VideoStudioApp> {
                             onChanged: (val) => setState(() => _background = val!),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            value: _duration,
-                            isDense: true,
-                            decoration: const InputDecoration(border: OutlineInputBorder(), labelText: "ความยาว"),
-                            items: const [
-                              DropdownMenuItem(value: "10s", child: Text("10 วินาที")),
-                              DropdownMenuItem(value: "20-30s", child: Text("20-30 วินาที")),
-                            ],
-                            onChanged: (val) => setState(() => _duration = val!),
-                          ),
-                        ),
                       ],
                     ),
                     const SizedBox(height: 10),
 
-                    SizedBox(
-                      width: double.infinity,
-                      height: 44,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.indigo,
-                          foregroundColor: Colors.white,
+                    // ปุ่มกด 2 สเต็ป
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue.shade700,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                            ),
+                            icon: const Icon(Icons.camera_alt_outlined, size: 18),
+                            label: const Text("สเต็ป 1: เจนรูป 9:16", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            onPressed: () => _injectToMetaAI(_buildImagePrompt(), "📸 ส่งคำสั่งเจนรูปภาพ 9:16 เข้า Meta AI แล้ว"),
+                          ),
                         ),
-                        icon: const Icon(Icons.send_rounded),
-                        label: const Text("🚀 สั่งสร้างวิดีโอเข้า Meta AI ทันที"),
-                        onPressed: _sendAutoToMetaAI,
-                      ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.purple.shade700,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                            ),
+                            icon: const Icon(Icons.movie_creation_outlined, size: 18),
+                            label: const Text("สเต็ป 2: เสกคลิป 9:16", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            onPressed: () => _injectToMetaAI(_buildAnimatePrompt(), "🎬 ส่งคำสั่ง Animate วิดีโอ 9:16 แล้ว"),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
