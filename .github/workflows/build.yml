@@ -30,7 +30,7 @@ jobs:
           cp lib/main.dart /tmp/my_main.dart
           rm -rf android lib pubspec.yaml
           flutter create --org com.dobbystudio --project-name dobby_app .
-          flutter pub add webview_flutter
+          flutter pub add webview_flutter image_picker
           cp /tmp/my_main.dart lib/main.dart
 
       - name: Build APK
