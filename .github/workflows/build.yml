@@ -30,11 +30,8 @@ jobs:
           cp lib/main.dart /tmp/my_main.dart
           rm -rf android lib pubspec.yaml
           flutter create --org com.dobbystudio --project-name dobby_app .
-          flutter pub add webview_flutter image_picker url_launcher
-          
-          # ใส่สิทธิ์อินเทอร์เน็ตลง AndroidManifest.xml
-          sed -i 's/<manifest xmlns:android="http:\/\/schemas.android.com\/apk\/res\/android">/<manifest xmlns:android="http:\/\/schemas.android.com\/apk\/res\/android">\n    <uses-permission android:name="android.permission.INTERNET"\/>/' android/app/src/main/AndroidManifest.xml
-          
+          flutter pub add webview_flutter webview_flutter_android image_picker
+          sed -i 's/<manifest xmlns:android="http:\/\/schemas.android.com\/apk\/res\/android">/<manifest xmlns:android="http:\/\/schemas.android.com\/apk\/res\/android">\n    <uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"\/>/' android/app/src/main/AndroidManifest.xml
           cp /tmp/my_main.dart lib/main.dart
 
       - name: Build APK
