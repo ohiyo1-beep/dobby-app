@@ -1,4 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 void main() {
@@ -17,8 +20,9 @@ class VideoStudioApp extends StatefulWidget {
 }
 
 class _VideoStudioAppState extends State<VideoStudioApp> {
-  final TextEditingController _productCtrl =
-      TextEditingController(text: "รองเท้าผ้าใบสีขาวพื้นนุ่ม");
+  File? _selectedImage;
+  final ImagePicker _picker = ImagePicker();
+  final TextEditingController _notesCtrl = TextEditingController();
 
   String _productSize = "normal";
   String _background = "market";
@@ -47,10 +51,18 @@ class _VideoStudioAppState extends State<VideoStudioApp> {
       ..loadRequest(Uri.parse('https://www.meta.ai'));
   }
 
+  Future<void> _pickImage() async {
+    final XFile? picked = await _picker.pickImage(source: ImageSource.gallery);
+    if (picked != null) {
+      setState(() {
+        _selectedImage = File(picked.path);
+      });
+    }
+  }
+
   String _buildCurrentPrompt() {
-    final pName = _productCtrl.text.trim().isEmpty
-        ? "สินค้า"
-        : _productCtrl.text.trim();
+    final note = _notesCtrl.text.trim();
+    final pDesc = note.isNotEmpty ? "product ($note) exactly matching reference image" : "product exactly matching reference image";
 
     String bgDesc = "";
     if (_background == "market") {
@@ -68,18 +80,18 @@ class _VideoStudioAppState extends State<VideoStudioApp> {
       if (_tenSecFocus == "persuade") {
         dialogue = "ทุกคน ตัวนี้เด่นเรื่องความทนทาน ใช้งานสะดวก น้ำหนักเบา ตอบโจทย์ชีวิตประจำวันมากครับ!";
         vidAction = (_productSize == "normal")
-            ? "holding and turning $pName to show textures"
-            : "pointing closely at key materials of the large $pName";
+            ? "holding and turning the $pDesc to showcase its texture and details"
+            : "standing beside and pointing closely at key materials of the large $pDesc";
       } else {
         dialogue = "โปรคุ้มมากรอบนี้ ใครมองหาอยู่รีบกดลงตะกร้าสีเหลืองซ้ายมือด่วนเลย ช้าหมดอดนะครับ!";
-        vidAction = "smiling confidently and pointing hand down toward bottom-left corner";
+        vidAction = "smiling confidently and pointing hand down toward the bottom-left basket";
       }
       return "Generate a photorealistic 10-second UGC review video of creator $vidAction in $bgDesc. Gaze: Genuine eye contact with camera. Dialogue: Character naturally speaks: '$dialogue' with realistic Thai lip-sync. 35mm lens.";
     } else {
       dialogue = "ทุกคน เจอปัญหานี้อยู่ใช่ไหม? ตัวนี้ตอบโจทย์มาก วัสดุดี ทนทาน คุ้มค่าสุดๆ รีบกดสั่งในตะกร้าซ้ายมือก่อนของหมดนะครับ!";
       vidAction = (_productSize == "normal")
-          ? "holding $pName at chest level, inspecting details, then pointing to bottom-left corner"
-          : "standing beside the large $pName, caressing surface, then gesturing to bottom-left corner";
+          ? "holding the $pDesc at chest level, inspecting details, then pointing to bottom-left corner"
+          : "standing beside the large $pDesc, caressing surface to show build quality, then gesturing to bottom-left corner";
       return "Generate a seamless photorealistic UGC video (20-30s) featuring creator $vidAction in $bgDesc. Sequence: [Hook] engaging camera gaze, [Value] showcasing craftsmanship, [CTA] smiling and pointing to shopping basket. Dialogue: Character naturally speaks: '$dialogue' synced with accurate Thai lip-sync. 35mm lens.";
     }
   }
@@ -121,30 +133,85 @@ class _VideoStudioAppState extends State<VideoStudioApp> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Dobby Studio (Auto Meta AI)"),
+        title: const Text("Dobby Studio (Image Upload)"),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
       ),
       body: Column(
         children: [
-          // ส่วนตั้งค่าสินค้าด้านบน (พับย่อได้)
           ExpansionTile(
             initiallyExpanded: true,
-            title: const Text("⚙️ ตั้งค่าสินค้า & วิดีโอ", style: TextStyle(fontWeight: FontWeight.bold)),
+            title: const Text("⚙️ ข้อมูลสินค้า & ภาพอ้างอิง", style: TextStyle(fontWeight: FontWeight.bold)),
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Column(
                   children: [
+                    // ส่วนอัปโหลดรูปภาพ
+                    GestureDetector(
+                      onTap: _pickImage,
+                      child: Container(
+                        height: 120,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.indigo.shade200, width: 2),
+                          borderRadius: BorderRadius.circular(10),
+                          color: Colors.grey.shade50,
+                        ),
+                        child: _selectedImage == null
+                            ? Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  Icon(Icons.add_photo_alternate_rounded, size: 40, color: Colors.indigo),
+                                  SizedBox(height: 6),
+                                  Text("แตะที่นี่เพื่ออัปโหลดรูปสินค้า (จากแคปหน้าจอ/คลังภาพ)",
+                                      style: TextStyle(color: Colors.indigo, fontWeight: FontWeight.w600, fontSize: 13)),
+                                ],
+                              )
+                            : ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.file(_selectedImage!, fit: BoxFit.contain),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // ช่องใส่ข้อความเสริม (ไม่บังคับ)
                     TextField(
-                      controller: _productCtrl,
+                      controller: _notesCtrl,
                       decoration: const InputDecoration(
-                        labelText: "ชื่อสินค้า",
+                        labelText: "รายละเอียดเพิ่มเติม (ถ้ามี เช่น กางเกงบูทสีเหลือง)",
                         isDense: true,
                         border: OutlineInputBorder(),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
+
+                    // ขนาดสินค้า
+                    Row(
+                      children: [
+                        Expanded(
+                          child: RadioListTile<String>(
+                            title: const Text("ขนาดปกติ (ถือ)", style: TextStyle(fontSize: 13)),
+                            value: "normal",
+                            groupValue: _productSize,
+                            contentPadding: EdgeInsets.zero,
+                            onChanged: (val) => setState(() => _productSize = val!),
+                          ),
+                        ),
+                        Expanded(
+                          child: RadioListTile<String>(
+                            title: const Text("ขนาดใหญ่ (ชี้/ลูบ)", style: TextStyle(fontSize: 13)),
+                            value: "large",
+                            groupValue: _productSize,
+                            contentPadding: EdgeInsets.zero,
+                            onChanged: (val) => setState(() => _productSize = val!),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // ฉากหลัง & ความยาวคลิป
                     Row(
                       children: [
                         Expanded(
@@ -154,7 +221,7 @@ class _VideoStudioAppState extends State<VideoStudioApp> {
                             decoration: const InputDecoration(border: OutlineInputBorder(), labelText: "ฉากหลัง"),
                             items: const [
                               DropdownMenuItem(value: "market", child: Text("ตลาดนัด")),
-                              DropdownMenuItem(value: "mall", child: Text("ห้างหรู")),
+                              DropdownMenuItem(value: "mall", child: Text("ห้างสรรพสินค้า")),
                               DropdownMenuItem(value: "factory", child: Text("โรงงาน")),
                             ],
                             onChanged: (val) => setState(() => _background = val!),
@@ -175,9 +242,11 @@ class _VideoStudioAppState extends State<VideoStudioApp> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
+
                     SizedBox(
                       width: double.infinity,
+                      height: 44,
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.indigo,
