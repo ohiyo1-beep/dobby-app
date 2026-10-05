@@ -1,10 +1,10 @@
-import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 void main() {
   runApp(const MaterialApp(
@@ -108,73 +108,79 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
     }
   }
 
-  // ระบบดึงข้อมูลจากลิงก์เว็บแบบฉลาด
-  Future<void> _fetchLinkDetails(String rawText, TextEditingController nameCtrl, TextEditingController priceCtrl) async {
-    final text = rawText.trim();
+  // ระบบดึงข้อมูลผ่าน WebView เบื้องหลัง (ทำงานในแอป Dobby ตัวเดียว ไม่ต้องสลับแอป)
+  void _fetchWithHiddenBrowser(
+    String rawInput,
+    TextEditingController nameCtrl,
+    Function(bool) setBusy,
+    Function() refreshUI,
+  ) {
+    String text = rawInput.trim();
     if (text.isEmpty) return;
 
-    // 1. ตรวจสอบว่ามีข้อความติดมากับลิงก์หรือไม่ (กรณีแชร์จากแอป)
+    // 1. ตรวจสอบว่ามีข้อความติดมากับลิงก์หรือไม่
     final urlRegex = RegExp(r'https?://[^\s]+');
     final match = urlRegex.firstMatch(text);
 
     if (match != null) {
-      final url = match.group(0)!;
+      final targetUrl = match.group(0)!;
       final beforeUrl = text.substring(0, match.start).trim();
 
+      // ถ้าแชร์ติดชื่อมา ดึงมาใช้ทันที
       if (beforeUrl.length > 5) {
         nameCtrl.text = beforeUrl.replaceAll(RegExp(r'[\r\n]+'), ' ');
+        refreshUI();
         return;
       }
 
-      // 2. ถ้าเป็นลิงก์เพียวๆ ให้ลองยิง Request ไปดึง Title ของเว็บ
-      try {
-        final res = await http.get(
-          Uri.parse(url),
-          headers: {
-            'User-Agent':
-                'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-          },
-        ).timeout(const Duration(seconds: 4));
+      // 2. ถ้าเป็นลิงก์ย่อ ให้เปิด Webview ภายในเครื่องเพื่อวิ่งตาม Redirect จริง
+      setBusy(true);
 
-        if (res.statusCode == 200) {
-          final body = utf8.decode(res.bodyBytes, allowMalformed: true);
+      late final WebViewController controller;
+      controller = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setUserAgent("Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36")
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onPageFinished: (String url) async {
+              // รอให้หน้าเว็บ Render DOM 1.5 วินาที
+              await Future.delayed(const Duration(milliseconds: 1500));
+              try {
+                // ดึง Title ของเว็บ
+                final title = await controller.getTitle();
+                if (title != null && title.trim().isNotEmpty) {
+                  String cleaned = title
+                      .replaceAll(" | Shopee Thailand", "")
+                      .replaceAll(" | TikTok", "")
+                      .replaceAll(" | Lazada.co.th", "")
+                      .replaceAll("Shopee Thailand", "")
+                      .trim();
 
-          // หา og:title หรือ title
-          final ogMatch = RegExp(r'<meta property="og:title" content="([^"]+)"').firstMatch(body);
-          final titleMatch = RegExp(r'<title>([^<]+)</title>').firstMatch(body);
+                  if (cleaned.length > 3 && !cleaned.toLowerCase().contains("robot") && !cleaned.toLowerCase().contains("captcha")) {
+                    nameCtrl.text = cleaned;
+                  }
+                }
+              } catch (_) {}
 
-          String? foundTitle = ogMatch?.group(1) ?? titleMatch?.group(1);
+              setBusy(false);
+              refreshUI();
+            },
+            onWebResourceError: (_) {
+              setBusy(false);
+              refreshUI();
+            },
+          ),
+        )
+        ..loadRequest(Uri.parse(targetUrl));
 
-          if (foundTitle != null && foundTitle.isNotEmpty) {
-            foundTitle = foundTitle
-                .replaceAll(" | Shopee Thailand", "")
-                .replaceAll(" | TikTok", "")
-                .replaceAll(" | Lazada.co.th", "")
-                .trim();
-            nameCtrl.text = foundTitle;
-            return;
-          }
-        }
-      } catch (_) {
-        // หากติดบล็อก Cloudflare ให้พยายามแกะชื่อจากข้อความใน URL
-      }
-
-      // 3. Fallback: ถอดรหัสชื่อสินค้าจากตัว URL เอง
-      try {
-        final uri = Uri.parse(url);
-        final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
-        if (segments.isNotEmpty) {
-          String slug = Uri.decodeComponent(segments.first);
-          slug = slug.replaceAll('-', ' ').replaceAll('_', ' ');
-          if (slug.length > 5 && !slug.contains("http")) {
-            nameCtrl.text = slug;
-            return;
-          }
-        }
-      } catch (_) {}
+      // กำหนด Timeout ป้องกันกรณีเน็ตช้าเกิน 7 วินาที
+      Timer(const Duration(seconds: 7), () {
+        setBusy(false);
+        refreshUI();
+      });
     } else {
-      // ถ้าพิมพ์ชื่อเข้ามาตรงๆ
       nameCtrl.text = text;
+      refreshUI();
     }
   }
 
@@ -184,7 +190,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
     final pointCtrl = TextEditingController();
     final priceCtrl = TextEditingController();
     String? pickedImagePath;
-    bool isLoading = false;
+    bool isScraping = false;
 
     showModalBottomSheet(
       context: context,
@@ -239,7 +245,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                             child: TextField(
                               controller: urlCtrl,
                               decoration: InputDecoration(
-                                hintText: "วางลิงก์ หรือข้อความแชร์สินค้า...",
+                                hintText: "วางลิงก์สินค้าที่นี่...",
                                 hintStyle: const TextStyle(fontSize: 12),
                                 isDense: true,
                                 filled: true,
@@ -256,24 +262,17 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                             ),
-                            onPressed: isLoading
+                            onPressed: isScraping
                                 ? null
-                                : () async {
-                                    setModalState(() => isLoading = true);
-                                    await _fetchLinkDetails(urlCtrl.text, nameCtrl, priceCtrl);
-                                    setModalState(() => isLoading = false);
-
-                                    if (nameCtrl.text.isNotEmpty) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text("✨ ดึงชื่อสินค้าสำเร็จแล้ว!")),
-                                      );
-                                    } else {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text("ระบบดึงชื่อไม่สำเร็จ กรุณาพิมพ์ชื่อสินค้าเองครับ")),
-                                      );
-                                    }
+                                : () {
+                                    _fetchWithHiddenBrowser(
+                                      urlCtrl.text,
+                                      nameCtrl,
+                                      (val) => setModalState(() => isScraping = val),
+                                      () => setModalState(() {}),
+                                    );
                                   },
-                            child: isLoading
+                            child: isScraping
                                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                                 : const Text("ดึงข้อมูล", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                           ),
