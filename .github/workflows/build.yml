@@ -36,9 +36,10 @@ jobs:
           flutter pub add url_launcher
           cp /tmp/backup/main.dart lib/main.dart
           flutter build apk --release
+          cp build/app/outputs/flutter-apk/app-release.apk $GITHUB_WORKSPACE/app-release.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: dobby-studio-app
-          path: ../dobby-app/build/app/outputs/flutter-apk/app-release.apk
+          path: app-release.apk
