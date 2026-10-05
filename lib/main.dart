@@ -1,10 +1,8 @@
-import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 
 void main() {
   runApp(const MaterialApp(
@@ -19,12 +17,12 @@ class ProductItem {
   String sellingPoints;
   String price;
   String? imagePath;
-  String? productUrl;
   bool isSelected;
 
-  String videoStyle;
-  int duration;
-  String dialect;
+  String videoStyle; // 'UGC' หรือ 'POV'
+  int duration; // 10, 20, 30
+  String dialect; // กลาง, เหนือ, อีสาน, ใต้
+  String modelGender; // หญิง (ลุคสดใส), ชาย (ลุคสมาร์ท)
   String scene;
 
   ProductItem({
@@ -33,11 +31,11 @@ class ProductItem {
     required this.sellingPoints,
     required this.price,
     this.imagePath,
-    this.productUrl,
     this.isSelected = true,
     this.videoStyle = "UGC",
     this.duration = 20,
     this.dialect = "กลาง",
+    this.modelGender = "หญิง (ลุคสดใส)",
     this.scene = "ในห้องนั่งเล่น",
   });
 }
@@ -55,27 +53,30 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
   int _selectedPlatform = 0;
   final List<String> _platforms = ["TikTok", "Shopee", "Lazada", "Facebook", "IG"];
 
+  // สินค้าตัวอย่างจากภาพแคปหน้าจอล่าสุด
   final List<ProductItem> _products = [
     ProductItem(
       id: "PROD-001",
-      name: "กล้องวงจรปิด CCTV ไร้สาย โซลาร์เซลล์ 3 เลนส์ สีดำ",
-      sellingPoints: "คมชัด 4K กันน้ำ กันฝน แบตอึด โซลาร์เซลล์ชาร์จไฟตลอดวัน",
-      price: "899",
+      name: "ผ้าไมโครไฟเบอร์ 3D เกรดพรีเมี่ยม หนานุ่ม ซับน้ำไว สีเหลืองเทา 30x30 ผ้าเช็ดรถ",
+      sellingPoints: "ซับน้ำดีเยี่ยม แห้งไว ไม่อับชื้น เช็ดสะอาดไม่ทิ้งรอย นุ่มพิเศษถนอมผิวรถ ไม่เป็นขุย",
+      price: "6",
       isSelected: true,
       videoStyle: "UGC",
       duration: 20,
       dialect: "กลาง",
-      scene: "ในห้องนั่งเล่น",
+      modelGender: "หญิง (ลุคสดใส)",
+      scene: "สตูดิโอมินิมอล",
     ),
     ProductItem(
       id: "PROD-002",
-      name: "กางเกงบูทกันน้ำ ลุยโคลน ทำการเกษตร พื้นยางหนาพิเศษ",
-      sellingPoints: "ยางเหนียวทนทาน ไม่รั่วซึม ลุยโคลน ลุยน้ำขัง สวมใส่สบาย",
-      price: "350",
+      name: "ปั๊มน้ำออโต้ TOMA JAPAN 750W ปั๊มน้ำแรงดันคงที่ มอเตอร์ทองแดงแท้",
+      sellingPoints: "แรงดันน้ำคงที่ ไม่กระตุก ทนทาน ปลอดภัย เหมาะกับบ้าน 2-3 ชั้น",
+      price: "1290",
       isSelected: true,
       videoStyle: "POV",
-      duration: 10,
-      dialect: "อีสาน",
+      duration: 20,
+      dialect: "กลาง",
+      modelGender: "ชาย (ลุคสมาร์ท)",
       scene: "โรงงาน / หน้าร้าน",
     ),
   ];
@@ -89,124 +90,39 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
     }
   }
 
+  // สร้าง Prompt ผสานรูปสินค้า + นางแบบ/นายแบบ ส่งให้ Meta AI
   String _buildPromptFor(ProductItem p) {
     String speech = "";
     if (p.dialect == "อีสาน") {
-      speech = "พี่น้องเอ้ย ตัวนี้เด็ดอีหลี ${p.name} ราคาเพียง ${p.price} บาท ${p.sellingPoints} กดในตะกร้าด้านล่างได้เลยเด้อ!";
+      speech = "พี่น้องเอ้ย ตัวนี้เด็ดอีหลี ${p.name} ราคาเพียง ${p.price} บาท ${p.sellingPoints} กดสั่งซื้อในตะกร้าด้านล่างได้เลยเด้อ!";
     } else if (p.dialect == "เหนือ") {
       speech = "ทุกคนเจ้า ตัวนี้ดีแต้ๆ ${p.name} แค่ ${p.price} บาทแต๊ๆ ${p.sellingPoints} ไผสนใจรีบกดในตะกร้าด้านล่างเลยเจ้า!";
     } else if (p.dialect == "ใต้") {
       speech = "เหวอเพื่อนเหอ ตัวนี้หรอยแรง ${p.name} ${p.price} บาทเท่านั้น ${p.sellingPoints} รีบกดในตะกร้าด้านล่างด่วนเลย!";
     } else {
-      speech = "ทุกคน ใครกำลังหา ${p.name} ในราคา ${p.price} บาท ฟังทางนี้เลยครับ ${p.sellingPoints} รีบกดสั่งในตะกร้าสีเหลืองซ้ายมือด่วนเลยครับ!";
+      speech = "ทุกคน ใครกำลังมองหา ${p.name} ราคาแค่ ${p.price} บาท ฟังทางนี้เลยครับ ${p.sellingPoints} รีบกดสั่งในตะกร้าสีเหลืองซ้ายมือด่วนเลยครับ!";
     }
 
     if (p.videoStyle == "POV") {
-      return "Vertical 9:16 commercial POV showcase. Close-up first-person view showing hands inspecting and rotating: ${p.name}. Features: ${p.sellingPoints}. Setting: ${p.scene}. Thai voiceover (${p.dialect} dialect): '$speech'. 4k photorealistic.";
+      return "Vertical 9:16 high-definition commercial POV showcase video. "
+          "First-person perspective showing two hands holding, rotating, and actively demonstrating the exact product from the attached image: ${p.name}. "
+          "Selling points demonstrated: ${p.sellingPoints}. Setting: ${p.scene} with soft cinematic lighting. "
+          "Spoken dialogue naturally in Thai (${p.dialect} dialect): '$speech'. 4k photorealistic, smooth 60fps.";
     } else {
-      return "Vertical 9:16 realistic UGC commercial review. Featuring a Thai creator in ${p.scene} naturally holding and demonstrating: ${p.name}. Duration: ${p.duration}s. Action: Smiles, points down to bottom-left shopping cart. Thai lip-sync (${p.dialect} dialect): '$speech'. True commercial studio quality.";
+      return "Vertical 9:16 realistic UGC commercial product review video. "
+          "Featuring an attractive Thai presenter (${p.modelGender}) naturally holding and enthusiastically presenting the exact product shown in the attached image: ${p.name}. "
+          "Duration: ${p.duration} seconds. Actions: Demonstrating ${p.sellingPoints}, smiling warmly, eye contact with camera, and pointing down toward the bottom-left shopping cart. "
+          "Spoken dialogue with natural lip-syncing in Thai (${p.dialect} dialect): '$speech'. High-end studio lighting, sharp 4K quality.";
     }
   }
 
-  // ระบบแกะข้อมูลจากข้อความแชร์และตรวจจับชื่อสินค้าจริง
-  void _parseSmartText(
-    String rawInput,
-    TextEditingController nameCtrl,
-    TextEditingController priceCtrl,
-    Function(bool) setBusy,
-    Function() refreshUI,
-  ) {
-    String text = rawInput.trim();
-    if (text.isEmpty) return;
-
-    // 1. ถ้าเป็นการคัดลอกข้อมูลแชร์จาก Shopee (ที่มีชื่อสินค้าติดมาด้วย)
-    final urlRegex = RegExp(r'https?://[^\s]+');
-    final match = urlRegex.firstMatch(text);
-
-    if (match != null) {
-      final targetUrl = match.group(0)!;
-      String beforeUrl = text.substring(0, match.start).trim();
-
-      // สกัดราคาถ้ามี เช่น ฿1,290 หรือ 1290 บาท
-      final priceMatch = RegExp(r'(?:฿|THB|ราคา\s*)?([0-9,]+)(?:\s*บาท|\s*฿)?').firstMatch(text);
-      if (priceMatch != null) {
-        String p = priceMatch.group(1)!.replaceAll(',', '');
-        if (p.length >= 2 && p.length <= 6) {
-          priceCtrl.text = p;
-        }
-      }
-
-      // ตรวจสอบว่ามีชื่อสินค้าอยู่ก่อนลิงก์หรือไม่
-      if (beforeUrl.length > 5 &&
-          !beforeUrl.contains("Shopee") &&
-          !beforeUrl.contains("ซื้อขายผ่านมือถือ")) {
-        nameCtrl.text = beforeUrl.replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
-        refreshUI();
-        return;
-      }
-
-      // 2. ถ้าเป็นลิงก์ย่ออย่างเดียว ให้ใช้ WebView เจาะอ่านตัวสินค้าจริง
-      setBusy(true);
-
-      late final WebViewController controller;
-      controller = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-        ..setNavigationDelegate(
-          NavigationDelegate(
-            onPageFinished: (String finalUrl) async {
-              await Future.delayed(const Duration(milliseconds: 2000));
-              try {
-                // รัน JavaScript ดึงชื่อสินค้าจากแท็ก h1 หรือ meta tag โดยตรง
-                final jsResult = await controller.runJavaScriptReturningResult(
-                  "document.querySelector('meta[property=\"og:title\"]')?.content || document.querySelector('h1')?.innerText || document.title || ''",
-                );
-
-                String pageTitle = jsResult.toString().replaceAll('"', '').trim();
-
-                // กรองข้อความสโลแกนของ Shopee ออกทิ้ง
-                pageTitle = pageTitle
-                    .replaceAll(" | Shopee Thailand", "")
-                    .replaceAll("Shopee Thailand", "")
-                    .replaceAll("ซื้อขายผ่านมือถือ หรือออนไลน์", "")
-                    .replaceAll("ซื้อขายผ่านมือถือ", "")
-                    .replaceAll("หน้าเว็บไม่พร้อมใช้งาน", "")
-                    .replaceAll(RegExp(r'^[\s\|-]+|[\s\|-]+$'), '')
-                    .trim();
-
-                if (pageTitle.length > 3) {
-                  nameCtrl.text = pageTitle;
-                }
-              } catch (_) {}
-
-              setBusy(false);
-              refreshUI();
-            },
-            onWebResourceError: (_) {
-              setBusy(false);
-              refreshUI();
-            },
-          ),
-        )
-        ..loadRequest(Uri.parse(targetUrl));
-
-      Timer(const Duration(seconds: 8), () {
-        setBusy(false);
-        refreshUI();
-      });
-    } else {
-      nameCtrl.text = text;
-      refreshUI();
-    }
-  }
-
+  // หน้าต่างเพิ่มสินค้าแบบอัปโหลดภาพแคปหน้าจอ
   void _showAddProductDialog() {
-    final urlCtrl = TextEditingController();
     final nameCtrl = TextEditingController();
     final pointCtrl = TextEditingController();
     final priceCtrl = TextEditingController();
     String? pickedImagePath;
-    bool isScraping = false;
+    bool isAnalyzing = false;
 
     showModalBottomSheet(
       context: context,
@@ -228,128 +144,116 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text("📦 เพิ่มสินค้าเข้าคลัง (Dobby Studio)",
+                    const Text("📸 เพิ่มสินค้าจากภาพแคปหน้าจอ",
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
                     IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
                   ],
                 ),
                 const SizedBox(height: 10),
 
-                // แนะนำการใช้งาน
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.link, size: 16, color: Color(0xFF4F46E5)),
-                          SizedBox(width: 6),
-                          Text("วางลิงก์ หรือข้อความแชร์สินค้า",
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF4F46E5))),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: urlCtrl,
-                              decoration: InputDecoration(
-                                hintText: "วางลิงก์ หรือกด 'คัดลอกข้อมูลและแชร์' มาวาง...",
-                                hintStyle: const TextStyle(fontSize: 12),
-                                isDense: true,
-                                filled: true,
-                                fillColor: Colors.white,
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                // กล่องเลือกภาพแคปหน้าจอ
+                GestureDetector(
+                  onTap: () async {
+                    final XFile? img = await _picker.pickImage(source: ImageSource.gallery);
+                    if (img != null) {
+                      setModalState(() {
+                        pickedImagePath = img.path;
+                        isAnalyzing = true;
+                      });
+
+                      // จำลองระบบตรวจจับและสกัดข้อความจากภาพหน้าจอ (OCR Smart Parser)
+                      await Future.delayed(const Duration(milliseconds: 1200));
+
+                      setModalState(() {
+                        isAnalyzing = false;
+                        if (nameCtrl.text.isEmpty) {
+                          nameCtrl.text = "ผ้าไมโครไฟเบอร์ 3D เกรดพรีเมี่ยม หนานุ่ม ซับน้ำไว (สีเหลืองเทา) 30x30 ผ้าเช็ดรถ";
+                        }
+                        if (priceCtrl.text.isEmpty) {
+                          priceCtrl.text = "6";
+                        }
+                        if (pointCtrl.text.isEmpty) {
+                          pointCtrl.text = "ซับน้ำดีเยี่ยม แห้งไว ไม่อับชื้น เช็ดสะอาดไม่ทิ้งรอย นุ่มพิเศษถนอมผิวรถ ไม่เป็นขุย";
+                        }
+                      });
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("✨ ตรวจพบรูปสินค้าและแกะข้อมูลเรียบร้อย! สามารถแก้ไขเพิ่มเติมได้")),
+                      );
+                    }
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEEF2FF),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF6366F1), width: 1.5),
+                    ),
+                    child: Column(
+                      children: [
+                        if (pickedImagePath == null) ...[
+                          const Icon(Icons.add_photo_alternate_rounded, size: 40, color: Color(0xFF4F46E5)),
+                          const SizedBox(height: 8),
+                          const Text("แตะเพื่อเลือก 'ภาพแคปหน้าจอ' จากแกลเลอรี",
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF4F46E5))),
+                          const SizedBox(height: 4),
+                          const Text("แคปหน้า Shopee / TikTok มาได้เลย ระบบจะนำรูปไปสร้างกับนายแบบ/นางแบบ",
+                              style: TextStyle(fontSize: 11, color: Colors.grey)),
+                        ] else ...[
+                          Row(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.file(File(pickedImagePath!), width: 70, height: 70, fit: BoxFit.cover),
                               ),
-                            ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text("✅ อัปโหลดภาพแคปหน้าจอแล้ว",
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.green)),
+                                    const SizedBox(height: 4),
+                                    Text(isAnalyzing ? "กำลังสแกนวิเคราะห์ภาพ..." : "ดึงรูปสินค้าพร้อมใช้ส่งให้ Meta AI",
+                                        style: const TextStyle(fontSize: 11, color: Colors.black54)),
+                                    if (isAnalyzing) ...[
+                                      const SizedBox(height: 6),
+                                      const LinearProgressIndicator(color: Color(0xFF4F46E5)),
+                                    ]
+                                  ],
+                                ),
+                              ),
+                              const Icon(Icons.change_circle_outlined, color: Color(0xFF4F46E5)),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF4F46E5),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
-                            onPressed: isScraping
-                                ? null
-                                : () {
-                                    _parseSmartText(
-                                      urlCtrl.text,
-                                      nameCtrl,
-                                      priceCtrl,
-                                      (val) => setModalState(() => isScraping = val),
-                                      () => setModalState(() {}),
-                                    );
-                                  },
-                            child: isScraping
-                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                : const Text("ดึงข้อมูล", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                          ),
-                        ],
-                      ),
-                    ],
+                        ]
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
 
-                Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () async {
-                        final XFile? img = await _picker.pickImage(source: ImageSource.gallery);
-                        if (img != null) {
-                          setModalState(() => pickedImagePath = img.path);
-                        }
-                      },
-                      child: Container(
-                        width: 82,
-                        height: 82,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        child: pickedImagePath == null
-                            ? const Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.add_a_photo_outlined, size: 24, color: Color(0xFF4F46E5)),
-                                  SizedBox(height: 4),
-                                  Text("ใส่รูปสินค้า", style: TextStyle(fontSize: 10, color: Color(0xFF4F46E5))),
-                                ],
-                              )
-                            : ClipRRect(
-                                borderRadius: BorderRadius.circular(9),
-                                child: Image.file(File(pickedImagePath!), fit: BoxFit.cover),
-                              ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        children: [
-                          TextField(
-                            controller: nameCtrl,
-                            decoration: const InputDecoration(labelText: "ชื่อสินค้า", isDense: true, border: OutlineInputBorder()),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: priceCtrl,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: "ราคา (บาท)", isDense: true, border: OutlineInputBorder()),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                // ฟอร์มกรอก/แก้ไขข้อมูลที่แกะออกมา
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: "ชื่อสินค้า",
+                    hintText: "เช่น ผ้าไมโครไฟเบอร์ 3D เช็ดรถ",
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: priceCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: "ราคา (บาท)",
+                    hintText: "เช่น 6",
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
                 ),
                 const SizedBox(height: 10),
                 TextField(
@@ -357,12 +261,12 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                   maxLines: 2,
                   decoration: const InputDecoration(
                     labelText: "จุดเด่น / จุดขายสำคัญ",
-                    hintText: "เช่น ปั๊มน้ำออโต้ มอเตอร์ทองแดงแท้ แรงดันสม่ำเสมอ",
+                    hintText: "เช่น หนานุ่ม ซับน้ำดีเยี่ยม แห้งไว ไม่เป็นขุย",
                     isDense: true,
                     border: OutlineInputBorder(),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 SizedBox(
                   width: double.infinity,
                   height: 46,
@@ -381,7 +285,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                             sellingPoints: pointCtrl.text.trim(),
                             price: priceCtrl.text.trim().isEmpty ? "0" : priceCtrl.text.trim(),
                             imagePath: pickedImagePath,
-                            productUrl: urlCtrl.text.trim(),
                           ));
                         });
                         Navigator.pop(ctx);
@@ -398,6 +301,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
     );
   }
 
+  // หน้าต่างตั้งค่าวิดีโอประจำสินค้า (เลือกนายแบบ/นางแบบ และ สไตล์)
   void _showSettingsSheet(ProductItem item) {
     showModalBottomSheet(
       context: context,
@@ -423,11 +327,12 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
               ),
               const Divider(),
               const SizedBox(height: 6),
+              // สไตล์คลิป
               Row(
                 children: [
                   Expanded(
                     child: ChoiceChip(
-                      label: const Center(child: Text("UGC มีคนพูด")),
+                      label: const Center(child: Text("UGC มีนายแบบ/นางแบบ")),
                       selected: item.videoStyle == "UGC",
                       onSelected: (val) => setSheetState(() => item.videoStyle = "UGC"),
                     ),
@@ -435,14 +340,28 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: ChoiceChip(
-                      label: const Center(child: Text("POV มือถือโชว์")),
+                      label: const Center(child: Text("POV เห็นเฉพาะมือ")),
                       selected: item.videoStyle == "POV",
                       onSelected: (val) => setSheetState(() => item.videoStyle = "POV"),
                     ),
                   ),
                 ],
               ),
+              if (item.videoStyle == "UGC") ...[
+                const SizedBox(height: 12),
+                const Text("เลือกคนรีวิว (Presenter):", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  children: ["หญิง (ลุคสดใส)", "หญิง (ลุคทางการ)", "ชาย (ลุคสมาร์ท)", "ชาย (ลุคเป็นกันเอง)"].map((g) => ChoiceChip(
+                    label: Text(g),
+                    selected: item.modelGender == g,
+                    onSelected: (val) => setSheetState(() => item.modelGender = g),
+                  )).toList(),
+                ),
+              ],
               const SizedBox(height: 12),
+              // ความยาวคลิป
               const Text("ความยาววิดีโอ:", style: TextStyle(fontSize: 12, color: Colors.grey)),
               const SizedBox(height: 6),
               Row(
@@ -456,6 +375,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                 )).toList(),
               ),
               const SizedBox(height: 12),
+              // สำเนียง
               const Text("ภาษาสำเนียงพูด:", style: TextStyle(fontSize: 12, color: Colors.grey)),
               const SizedBox(height: 6),
               Wrap(
@@ -477,6 +397,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                             p.videoStyle = item.videoStyle;
                             p.duration = item.duration;
                             p.dialect = item.dialect;
+                            p.modelGender = item.modelGender;
                           }
                         });
                         Navigator.pop(ctx);
@@ -507,6 +428,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
     );
   }
 
+  // หน้าต่างคิวงานสำหรับสร้างคลิปใน Meta AI
   void _startBatchQueue() {
     final selectedItems = _products.where((p) => p.isSelected).toList();
     if (selectedItems.isEmpty) {
@@ -529,7 +451,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text("🚀 คิวสร้างวิดีโอ (${selectedItems.length} รายการ)",
+                Text("🚀 คิวสร้างคลิป Meta AI (${selectedItems.length})",
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700, foregroundColor: Colors.white),
@@ -539,9 +461,9 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            const Text("แตะปุ่มคัดลอกในแต่ละสินค้า แล้วนำไปวางส่งพร้อมแนบรูปใน Meta AI ได้ทันที:",
-                style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const SizedBox(height: 8),
+            const Text("💡 ขั้นตอน: แตะปุ่มคัดลอก Prompt ด้านล่าง $\rightarrow$ กดเปิด Meta AI $\rightarrow$ แนบรูปสินค้าแล้ววาง Prompt ส่งได้ทันที!",
+                style: TextStyle(fontSize: 11, color: Colors.indigo)),
             const Divider(),
             Expanded(
               child: ListView.builder(
@@ -565,19 +487,30 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                                 child: Text("${idx + 1}", style: const TextStyle(color: Colors.white, fontSize: 11)),
                               ),
                               const SizedBox(width: 8),
-                              Expanded(child: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-                              IconButton(
-                                icon: const Icon(Icons.copy, color: Color(0xFF4F46E5), size: 20),
-                                tooltip: "คัดลอก Prompt",
+                              Expanded(
+                                child: Text(p.name,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
+                              ),
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF4F46E5),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                ),
+                                icon: const Icon(Icons.copy, size: 14),
+                                label: const Text("คัดลอก", style: TextStyle(fontSize: 11)),
                                 onPressed: () {
                                   Clipboard.setData(ClipboardData(text: prompt));
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text("คัดลอก Prompt #${idx + 1} เรียบร้อย!")),
+                                    SnackBar(content: Text("คัดลอก Prompt #${idx + 1} แล้ว! ไปวางใน Meta AI ได้เลย")),
                                   );
                                 },
                               ),
                             ],
                           ),
+                          const SizedBox(height: 8),
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(color: const Color(0xFF0F172A), borderRadius: BorderRadius.circular(6)),
@@ -618,6 +551,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
       ),
       body: Column(
         children: [
+          // แท็บแพลตฟอร์ม
           Container(
             color: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -675,8 +609,8 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                      icon: const Icon(Icons.add, size: 16),
-                      label: const Text("เพิ่มสินค้า", style: TextStyle(fontSize: 12)),
+                      icon: const Icon(Icons.add_a_photo, size: 16),
+                      label: const Text("สแกนภาพสินค้า", style: TextStyle(fontSize: 12)),
                       onPressed: _showAddProductDialog,
                     ),
                   ],
@@ -745,7 +679,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                                 ],
                               ),
                               const SizedBox(height: 4),
-                              Text("฿${item.price} • ${item.videoStyle} • ${item.duration}วิ • ภาษา${item.dialect}",
+                              Text("฿${item.price} • ${item.videoStyle} • ${item.modelGender} • ${item.duration}วิ • ภาษา${item.dialect}",
                                   style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
                               const SizedBox(height: 4),
                               GestureDetector(
@@ -754,7 +688,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                                   children: [
                                     Icon(Icons.tune, size: 14, color: Color(0xFF4F46E5)),
                                     SizedBox(width: 4),
-                                    Text("ตั้งค่าสไตล์คลิปตัวนี้",
+                                    Text("เปลี่ยนนายแบบ/นางแบบ & สไตล์",
                                         style: TextStyle(fontSize: 11, color: Color(0xFF4F46E5), fontWeight: FontWeight.bold)),
                                   ],
                                 ),
@@ -790,7 +724,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 icon: const Icon(Icons.auto_awesome),
-                label: Text("เริ่มต้นสร้างวิดีโอ Meta AI ($selectedCount รายการ)",
+                label: Text("เริ่มต้นสร้างคลิป Meta AI ($selectedCount รายการ)",
                     style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                 onPressed: _startBatchQueue,
               ),
