@@ -22,8 +22,8 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.19.6'
           channel: 'stable'
-          cache: true
 
       - name: Create and Build Clean App
         run: |
@@ -31,9 +31,9 @@ jobs:
           cp lib/main.dart /tmp/backup/main.dart
           cd ..
           rm -rf dobby-app
-          flutter create --org com.dobbystudio --project-name dobby_app dobby-app
+          flutter create --org com.dobbystudio --project-name dobby_app --platforms=android dobby-app
           cd dobby-app
-          flutter pub add url_launcher image_picker
+          flutter pub add url_launcher
           cp /tmp/backup/main.dart lib/main.dart
           flutter build apk --release
           cp build/app/outputs/flutter-apk/app-release.apk $GITHUB_WORKSPACE/app-release.apk
