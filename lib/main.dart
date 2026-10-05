@@ -16,9 +16,9 @@ class ProductItem {
   String price;
   bool isSelected;
 
-  String videoStyle;
-  int duration;
-  String dialect;
+  String videoStyle; // 'UGC' หรือ 'POV'
+  int duration; // 10, 20, 30
+  String dialect; // กลาง, เหนือ, อีสาน, ใต้
   String presenter;
   String scene;
 
@@ -109,9 +109,9 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
   }
 
   void _showAddProductDialog() {
-    final nameCtrl = TextEditingController(text: "ผ้าไมโครไฟเบอร์ 3D เกรดพรีเมี่ยม ซับน้ำไว 30x30");
-    final pointCtrl = TextEditingController(text: "ซับน้ำดีเยี่ยม แห้งไว เช็ดสะอาดไม่ทิ้งรอย ขนนุ่มถนอมผิวรถ ไม่เป็นขุย");
-    final priceCtrl = TextEditingController(text: "6");
+    final nameCtrl = TextEditingController();
+    final pointCtrl = TextEditingController();
+    final priceCtrl = TextEditingController();
 
     showModalBottomSheet(
       context: context,
@@ -137,7 +137,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                   IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
@@ -152,7 +152,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                     SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        "รูปสินค้าที่แคปไว้จาก Shopee/TikTok สามารถเปิดแชต Meta AI แล้วกดแนบรูปส่งคู่กับ Prompt ได้ทันที",
+                        "ภาพสินค้าที่แคปไว้จาก Shopee/TikTok นำไปกดแนบรูปส่งคู่กับ Prompt ใน Meta AI ได้ทันที",
                         style: TextStyle(fontSize: 12, color: Color(0xFF4F46E5)),
                       ),
                     ),
@@ -162,19 +162,34 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
               const SizedBox(height: 14),
               TextField(
                 controller: nameCtrl,
-                decoration: const InputDecoration(labelText: "ชื่อสินค้า", isDense: true, border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: "ชื่อสินค้า",
+                  hintText: "เช่น ผ้าไมโครไฟเบอร์ 3D",
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
               ),
               const SizedBox(height: 10),
               TextField(
                 controller: priceCtrl,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: "ราคา (บาท)", isDense: true, border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: "ราคา (บาท)",
+                  hintText: "เช่น 6",
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
               ),
               const SizedBox(height: 10),
               TextField(
                 controller: pointCtrl,
                 maxLines: 2,
-                decoration: const InputDecoration(labelText: "จุดเด่น / จุดขายสำคัญ", isDense: true, border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: "จุดเด่น / จุดขายสำคัญ",
+                  hintText: "เช่น ซับน้ำดีเยี่ยม แห้งไว ขนนุ่มไม่ทิ้งรอย",
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
               ),
               const SizedBox(height: 16),
               SizedBox(
@@ -357,7 +372,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
               ],
             ),
             const SizedBox(height: 6),
-            const Text("คัดลอก Prompt $\rightarrow$ เปิด Meta AI $\rightarrow$ แนบรูปสินค้าแล้ววางสร้างคลิปได้ทันที",
+            const Text("คัดลอก Prompt แล้วไปเปิดแชต Meta AI แนบรูปสินค้าส่งสร้างคลิปได้ทันที",
                 style: TextStyle(fontSize: 11, color: Colors.grey)),
             const Divider(),
             Expanded(
