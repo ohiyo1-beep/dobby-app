@@ -33,10 +33,10 @@ jobs:
           rm -rf dobby-app
           flutter create --org com.dobbystudio --project-name dobby_app dobby-app
           cd dobby-app
-          flutter pub add url_launcher image_picker webview_flutter
+          flutter pub add url_launcher image_picker
           
-          # กำหนดสิทธิ์อินเทอร์เน็ตใน AndroidManifest
-          sed -i 's/<manifest xmlns:android="http:\/\/schemas.android.com\/apk\/res\/android">/<manifest xmlns:android="http:\/\/schemas.android.com\/apk\/res\/android">\n    <uses-permission android:name="android.permission.INTERNET"\/>/' android/app/src/main/AndroidManifest.xml
+          # สิทธิ์การอ่านรูปและอินเทอร์เน็ต
+          sed -i 's/<manifest xmlns:android="http:\/\/schemas.android.com\/apk\/res\/android">/<manifest xmlns:android="http:\/\/schemas.android.com\/apk\/res\/android">\n    <uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"\/>/' android/app/src/main/AndroidManifest.xml
           
           cp /tmp/backup/main.dart lib/main.dart
           flutter build apk --release
