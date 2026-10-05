@@ -7,7 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 void main() {
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
-    home: KubdeeStudioApp(),
+    home: DobbyStudioApp(),
   ));
 }
 
@@ -18,6 +18,7 @@ class ProductItem {
   String sellingPoints;
   String price;
   String? imagePath;
+  String? productUrl;
   bool isSelected;
 
   // การตั้งค่าวิดีโอประจำสินค้านั้นๆ
@@ -32,6 +33,7 @@ class ProductItem {
     required this.sellingPoints,
     required this.price,
     this.imagePath,
+    this.productUrl,
     this.isSelected = true,
     this.videoStyle = "UGC",
     this.duration = 20,
@@ -40,21 +42,21 @@ class ProductItem {
   });
 }
 
-class KubdeeStudioApp extends StatefulWidget {
-  const KubdeeStudioApp({super.key});
+class DobbyStudioApp extends StatefulWidget {
+  const DobbyStudioApp({super.key});
 
   @override
-  State<KubdeeStudioApp> createState() => _KubdeeStudioAppState();
+  State<DobbyStudioApp> createState() => _DobbyStudioAppState();
 }
 
-class _KubdeeStudioAppState extends State<KubdeeStudioApp> {
+class _DobbyStudioAppState extends State<DobbyStudioApp> {
   final ImagePicker _picker = ImagePicker();
 
   // แพลตฟอร์มเป้าหมาย
   int _selectedPlatform = 0;
   final List<String> _platforms = ["TikTok", "Shopee", "Lazada", "Facebook", "IG"];
 
-  // รายการสินค้าในคลัง (มีตัวอย่างตั้งต้นให้ทดสอบทันที)
+  // รายการสินค้าในคลัง
   final List<ProductItem> _products = [
     ProductItem(
       id: "PROD-001",
@@ -120,8 +122,26 @@ class _KubdeeStudioAppState extends State<KubdeeStudioApp> {
     }
   }
 
-  // เพิ่มสินค้าใหม่เข้าคลัง
+  // ตัวแยกดึงชื่อสินค้าและข้อความจากลิงก์หรือข้อความที่คัดลอกมา
+  void _extractProductInfo(String input, TextEditingController nameCtrl, TextEditingController priceCtrl) {
+    if (input.isEmpty) return;
+    
+    // ถ้าผู้ใช้ก๊อปปี้ข้อความแชร์จาก Shopee/TikTok ที่ติดชื่อสินค้ามาด้วย
+    String cleaned = input.trim();
+    if (cleaned.contains("http://") || cleaned.contains("https://")) {
+      // ดึงข้อความส่วนหัวก่อนถึงลิงก์ (ถ้ามี)
+      final parts = cleaned.split(RegExp(r'https?://'));
+      if (parts[0].trim().isNotEmpty) {
+        nameCtrl.text = parts[0].replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+      }
+    } else {
+      nameCtrl.text = cleaned;
+    }
+  }
+
+  // หน้าต่างเพิ่มสินค้าเข้าคลัง (มีช่องวางลิงก์ Shopee / TikTok)
   void _showAddProductDialog() {
+    final urlCtrl = TextEditingController();
     final nameCtrl = TextEditingController();
     final pointCtrl = TextEditingController();
     final priceCtrl = TextEditingController();
@@ -139,100 +159,180 @@ class _KubdeeStudioAppState extends State<KubdeeStudioApp> {
             right: 20,
             top: 20,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text("📦 เพิ่มสินค้าเข้าคลังใหม่", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  GestureDetector(
-                    onTap: () async {
-                      final XFile? img = await _picker.pickImage(source: ImageSource.gallery);
-                      if (img != null) {
-                        setModalState(() => pickedImagePath = img.path);
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text("📦 เพิ่มสินค้าเข้าคลัง (Dobby Studio)",
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                    IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                  ],
+                ),
+                const SizedBox(height: 10),
+
+                // ช่องนำเข้าจากลิงก์ Shopee / TikTok
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.link, size: 16, color: Color(0xFF4F46E5)),
+                          SizedBox(width: 6),
+                          Text("วางลิงก์สินค้า (Shopee / TikTok / Lazada)",
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF4F46E5))),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: urlCtrl,
+                              decoration: InputDecoration(
+                                hintText: "วางลิงก์สินค้า หรือข้อความแชร์ที่นี่...",
+                                hintStyle: const TextStyle(fontSize: 12),
+                                isDense: true,
+                                filled: true,
+                                fillColor: Colors.white,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF4F46E5),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onPressed: () {
+                              _extractProductInfo(urlCtrl.text, nameCtrl, priceCtrl);
+                              setModalState(() {});
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("✨ ดึงข้อมูลจากลิงก์เรียบร้อย! กรุณาตรวจสอบรายละเอียด")),
+                              );
+                            },
+                            child: const Text("ดึงข้อมูล", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // รูปและข้อมูลทั่วไป
+                Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () async {
+                        final XFile? img = await _picker.pickImage(source: ImageSource.gallery);
+                        if (img != null) {
+                          setModalState(() => pickedImagePath = img.path);
+                        }
+                      },
+                      child: Container(
+                        width: 82,
+                        height: 82,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: pickedImagePath == null
+                            ? const Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.add_a_photo_outlined, size: 24, color: Color(0xFF4F46E5)),
+                                  SizedBox(height: 4),
+                                  Text("ใส่รูปสินค้า", style: TextStyle(fontSize: 10, color: Color(0xFF4F46E5))),
+                                ],
+                              )
+                            : ClipRRect(
+                                borderRadius: BorderRadius.circular(9),
+                                child: Image.file(File(pickedImagePath!), fit: BoxFit.cover),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          TextField(
+                            controller: nameCtrl,
+                            decoration: const InputDecoration(labelText: "ชื่อสินค้า", isDense: true, border: OutlineInputBorder()),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: priceCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: "ราคา (บาท)", isDense: true, border: OutlineInputBorder()),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: pointCtrl,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: "จุดเด่น / จุดขายสำคัญ",
+                    hintText: "เช่น เนื้อผ้านุ่ม ระบายอากาศดี หรือ คมชัด 4K กันน้ำ",
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF4F46E5),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () {
+                      if (nameCtrl.text.trim().isNotEmpty) {
+                        setState(() {
+                          _products.add(ProductItem(
+                            id: "PROD-00${_products.length + 1}",
+                            name: nameCtrl.text.trim(),
+                            sellingPoints: pointCtrl.text.trim(),
+                            price: priceCtrl.text.trim().isEmpty ? "0" : priceCtrl.text.trim(),
+                            imagePath: pickedImagePath,
+                            productUrl: urlCtrl.text.trim(),
+                          ));
+                        });
+                        Navigator.pop(ctx);
                       }
                     },
-                    child: Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: pickedImagePath == null
-                          ? const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.add_a_photo_outlined, size: 24, color: Colors.indigo),
-                                SizedBox(height: 4),
-                                Text("ใส่รูปสินค้า", style: TextStyle(fontSize: 10, color: Colors.indigo)),
-                              ],
-                            )
-                          : ClipRRect(
-                              borderRadius: BorderRadius.circular(9),
-                              child: Image.file(File(pickedImagePath!), fit: BoxFit.cover),
-                            ),
-                    ),
+                    child: const Text("บันทึกลงคลังสินค้า", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      children: [
-                        TextField(
-                          controller: nameCtrl,
-                          decoration: const InputDecoration(labelText: "ชื่อสินค้า", isDense: true, border: OutlineInputBorder()),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: priceCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: "ราคา (บาท)", isDense: true, border: OutlineInputBorder()),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: pointCtrl,
-                maxLines: 2,
-                decoration: const InputDecoration(labelText: "จุดเด่น / จุดขาย", isDense: true, border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                height: 46,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4F46E5), foregroundColor: Colors.white),
-                  onPressed: () {
-                    if (nameCtrl.text.trim().isNotEmpty) {
-                      setState(() {
-                        _products.add(ProductItem(
-                          id: "PROD-00${_products.length + 1}",
-                          name: nameCtrl.text.trim(),
-                          sellingPoints: pointCtrl.text.trim(),
-                          price: priceCtrl.text.trim().isEmpty ? "0" : priceCtrl.text.trim(),
-                          imagePath: pickedImagePath,
-                        ));
-                      });
-                      Navigator.pop(ctx);
-                    }
-                  },
-                  child: const Text("บันทึกลงคลังสินค้า", style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  // หน้าต่างปรับการตั้งค่าสไตล์คลิปรายสินค้า (พร้อมปุ่ม 'ใช้กับทุกสินค้า')
+  // หน้าต่างปรับการตั้งค่าสไตล์คลิปรายสินค้า
   void _showSettingsSheet(ProductItem item) {
     showModalBottomSheet(
       context: context,
@@ -305,13 +405,11 @@ class _KubdeeStudioAppState extends State<KubdeeStudioApp> {
                 )).toList(),
               ),
               const SizedBox(height: 20),
-              // ปุ่มกดใช้งาน
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () {
-                        // ใช้การตั้งค่านี้กับสินค้าทุกตัวในคลัง
                         setState(() {
                           for (var p in _products) {
                             p.videoStyle = item.videoStyle;
@@ -347,7 +445,7 @@ class _KubdeeStudioAppState extends State<KubdeeStudioApp> {
     );
   }
 
-  // หน้าจอแสดงคิว Prompt พร้อมส่งไป Meta AI
+  // หน้าจอแสดงคิว Prompt
   void _startBatchQueue() {
     final selectedItems = _products.where((p) => p.isSelected).toList();
     if (selectedItems.isEmpty) {
@@ -444,7 +542,8 @@ class _KubdeeStudioAppState extends State<KubdeeStudioApp> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text("Kubdee Studio AI", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        title: const Text("Dobby Studio", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        centerTitle: true,
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF0F172A),
         elevation: 0.5,
@@ -458,7 +557,7 @@ class _KubdeeStudioAppState extends State<KubdeeStudioApp> {
       ),
       body: Column(
         children: [
-          // แถบไอคอน Social Platforms แบบในคลิป
+          // แถบแพลตฟอร์ม
           Container(
             color: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -619,7 +718,7 @@ class _KubdeeStudioAppState extends State<KubdeeStudioApp> {
             ),
           ),
 
-          // ปุ่มสร้างคิวแบบในคลิป Kubdee AI
+          // ปุ่มเริ่มสร้างวิดีโอ
           Container(
             padding: const EdgeInsets.all(16),
             decoration: const BoxDecoration(
