@@ -33,7 +33,11 @@ jobs:
           rm -rf dobby-app
           flutter create --org com.dobbystudio --project-name dobby_app dobby-app
           cd dobby-app
-          flutter pub add url_launcher image_picker
+          flutter pub add url_launcher image_picker http
+          
+          # เปิดสิทธิ์ใช้งานอินเทอร์เน็ตสำหรับ Android
+          sed -i 's/<manifest xmlns:android="http:\/\/schemas.android.com\/apk\/res\/android">/<manifest xmlns:android="http:\/\/schemas.android.com\/apk\/res\/android">\n    <uses-permission android:name="android.permission.INTERNET"\/>/' android/app/src/main/AndroidManifest.xml
+          
           cp /tmp/backup/main.dart lib/main.dart
           flutter build apk --release
           cp build/app/outputs/flutter-apk/app-release.apk $GITHUB_WORKSPACE/app-release.apk
