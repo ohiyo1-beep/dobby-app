@@ -1,7 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 void main() {
@@ -16,13 +14,12 @@ class ProductItem {
   String name;
   String sellingPoints;
   String price;
-  String? imagePath;
   bool isSelected;
 
-  String videoStyle; // 'UGC' หรือ 'POV'
-  int duration; // 10, 20, 30
-  String dialect; // กลาง, เหนือ, อีสาน, ใต้
-  String presenter; // นายแบบ / นางแบบ
+  String videoStyle;
+  int duration;
+  String dialect;
+  String presenter;
   String scene;
 
   ProductItem({
@@ -30,7 +27,6 @@ class ProductItem {
     required this.name,
     required this.sellingPoints,
     required this.price,
-    this.imagePath,
     this.isSelected = true,
     this.videoStyle = "UGC",
     this.duration = 20,
@@ -48,12 +44,9 @@ class DobbyStudioApp extends StatefulWidget {
 }
 
 class _DobbyStudioAppState extends State<DobbyStudioApp> {
-  final ImagePicker _picker = ImagePicker();
-
   int _selectedPlatform = 0;
   final List<String> _platforms = ["TikTok", "Shopee", "Lazada", "Facebook", "IG"];
 
-  // สินค้าตัวอย่างจากภาพแคปหน้าจอล่าสุด
   final List<ProductItem> _products = [
     ProductItem(
       id: "PROD-001",
@@ -116,146 +109,100 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
   }
 
   void _showAddProductDialog() {
-    final nameCtrl = TextEditingController(text: "ผ้าไมโครไฟเบอร์ 3D เกรดพรีเมี่ยม หนานุ่ม ซับน้ำไว");
+    final nameCtrl = TextEditingController(text: "ผ้าไมโครไฟเบอร์ 3D เกรดพรีเมี่ยม ซับน้ำไว 30x30");
     final pointCtrl = TextEditingController(text: "ซับน้ำดีเยี่ยม แห้งไว เช็ดสะอาดไม่ทิ้งรอย ขนนุ่มถนอมผิวรถ ไม่เป็นขุย");
     final priceCtrl = TextEditingController(text: "6");
-    String? pickedImagePath;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-            left: 20,
-            right: 20,
-            top: 20,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+          left: 20,
+          right: 20,
+          top: 20,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("📦 เพิ่มสินค้าเข้าคลัง (Dobby Studio)",
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEEF2FF),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF6366F1)),
+                ),
+                child: const Row(
                   children: [
-                    const Text("📸 เพิ่มสินค้าจากภาพแคปหน้าจอ",
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                    Icon(Icons.photo_library_outlined, color: Color(0xFF4F46E5), size: 28),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        "รูปสินค้าที่แคปไว้จาก Shopee/TikTok สามารถเปิดแชต Meta AI แล้วกดแนบรูปส่งคู่กับ Prompt ได้ทันที",
+                        style: TextStyle(fontSize: 12, color: Color(0xFF4F46E5)),
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 10),
-
-                // กล่องแตะเลือกภาพแคปหน้าจอ
-                GestureDetector(
-                  onTap: () async {
-                    final XFile? img = await _picker.pickImage(source: ImageSource.gallery);
-                    if (img != null) {
-                      setModalState(() {
-                        pickedImagePath = img.path;
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: "ชื่อสินค้า", isDense: true, border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: priceCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: "ราคา (บาท)", isDense: true, border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: pointCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(labelText: "จุดเด่น / จุดขายสำคัญ", isDense: true, border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF4F46E5),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () {
+                    if (nameCtrl.text.trim().isNotEmpty) {
+                      setState(() {
+                        _products.add(ProductItem(
+                          id: "PROD-00${_products.length + 1}",
+                          name: nameCtrl.text.trim(),
+                          sellingPoints: pointCtrl.text.trim(),
+                          price: priceCtrl.text.trim().isEmpty ? "0" : priceCtrl.text.trim(),
+                        ));
                       });
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("✨ โหลดภาพสินค้าเรียบร้อย พร้อมนำไปใช้ใน Meta AI")),
-                      );
+                      Navigator.pop(ctx);
                     }
                   },
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEEF2FF),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFF6366F1), width: 1.5),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 60,
-                          height: 60,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: pickedImagePath == null
-                              ? const Icon(Icons.add_a_photo, color: Color(0xFF4F46E5), size: 28)
-                              : ClipRRect(
-                                  borderRadius: BorderRadius.circular(7),
-                                  child: Image.file(File(pickedImagePath!), fit: BoxFit.cover),
-                                ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                pickedImagePath == null ? "แตะเพื่อเลือก 'ภาพแคปหน้าจอ'" : "✅ อัปโหลดภาพสินค้าแล้ว",
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                  color: pickedImagePath == null ? const Color(0xFF4F46E5) : Colors.green,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              const Text("แคปหน้าจอ Shopee/TikTok มาใส่ได้เลย",
-                                  style: TextStyle(fontSize: 11, color: Colors.black54)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  child: const Text("บันทึกลงคลังสินค้า", style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
-                const SizedBox(height: 14),
-
-                TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: "ชื่อสินค้า", isDense: true, border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: priceCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: "ราคา (บาท)", isDense: true, border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: pointCtrl,
-                  maxLines: 2,
-                  decoration: const InputDecoration(labelText: "จุดเด่น / จุดขายสำคัญ", isDense: true, border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  height: 46,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF4F46E5),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                    onPressed: () {
-                      if (nameCtrl.text.trim().isNotEmpty) {
-                        setState(() {
-                          _products.add(ProductItem(
-                            id: "PROD-00${_products.length + 1}",
-                            name: nameCtrl.text.trim(),
-                            sellingPoints: pointCtrl.text.trim(),
-                            price: priceCtrl.text.trim().isEmpty ? "0" : priceCtrl.text.trim(),
-                            imagePath: pickedImagePath,
-                          ));
-                        });
-                        Navigator.pop(ctx);
-                      }
-                    },
-                    child: const Text("บันทึกลงคลังสินค้า", style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -527,14 +474,12 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
             ),
           ),
           const Divider(height: 1),
-
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text("📦 ข้อมูลสินค้า (${_products.length})",
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                Text("📦 ข้อมูลสินค้า (${_products.length})", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                 Row(
                   children: [
                     TextButton(
@@ -546,8 +491,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                           }
                         });
                       },
-                      child: Text(_products.every((p) => p.isSelected) ? "ยกเลิกเลือก" : "เลือกทั้งหมด",
-                          style: const TextStyle(fontSize: 12)),
+                      child: Text(_products.every((p) => p.isSelected) ? "ยกเลิกเลือก" : "เลือกทั้งหมด", style: const TextStyle(fontSize: 12)),
                     ),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
@@ -556,8 +500,8 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                      icon: const Icon(Icons.add_a_photo, size: 16),
-                      label: const Text("เพิ่มภาพสินค้า", style: TextStyle(fontSize: 12)),
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text("เพิ่มสินค้า", style: TextStyle(fontSize: 12)),
                       onPressed: _showAddProductDialog,
                     ),
                   ],
@@ -565,7 +509,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
               ],
             ),
           ),
-
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -577,10 +520,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                   margin: const EdgeInsets.only(bottom: 10),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(
-                      color: item.isSelected ? const Color(0xFF4F46E5) : Colors.grey.shade200,
-                      width: item.isSelected ? 1.5 : 1,
-                    ),
+                    side: BorderSide(color: item.isSelected ? const Color(0xFF4F46E5) : Colors.grey.shade200, width: item.isSelected ? 1.5 : 1),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(10),
@@ -593,34 +533,20 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                           onChanged: (val) => setState(() => item.isSelected = val ?? false),
                         ),
                         Container(
-                          width: 58,
-                          height: 58,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: item.imagePath != null
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(7),
-                                  child: Image.file(File(item.imagePath!), fit: BoxFit.cover),
-                                )
-                              : const Icon(Icons.inventory_2_outlined, color: Colors.grey, size: 26),
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(color: Colors.indigo.shade50, borderRadius: BorderRadius.circular(8)),
+                          child: const Icon(Icons.inventory_2_outlined, color: Color(0xFF4F46E5), size: 26),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(item.name,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis),
+                              Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
                               const SizedBox(height: 4),
-                              Text(
-                                "฿${item.price} • ${item.videoStyle} • ${item.presenter} • ${item.duration}วิ • ภาษา${item.dialect}",
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
-                              ),
+                              Text("฿${item.price} • ${item.videoStyle} • ${item.presenter} • ${item.duration}วิ • ${item.dialect}",
+                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
                               const SizedBox(height: 4),
                               GestureDetector(
                                 onTap: () => _showSettingsSheet(item),
@@ -628,8 +554,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                                   children: [
                                     Icon(Icons.tune, size: 14, color: Color(0xFF4F46E5)),
                                     SizedBox(width: 4),
-                                    Text("เปลี่ยนนายแบบ/นางแบบ & สไตล์",
-                                        style: TextStyle(fontSize: 11, color: Color(0xFF4F46E5), fontWeight: FontWeight.bold)),
+                                    Text("เปลี่ยนนายแบบ/นางแบบ & สไตล์", style: TextStyle(fontSize: 11, color: Color(0xFF4F46E5), fontWeight: FontWeight.bold)),
                                   ],
                                 ),
                               ),
@@ -647,7 +572,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
               },
             ),
           ),
-
           Container(
             padding: const EdgeInsets.all(16),
             decoration: const BoxDecoration(
