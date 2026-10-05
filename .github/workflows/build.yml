@@ -33,6 +33,7 @@ jobs:
           rm -rf dobby-app
           flutter create --org com.dobbystudio --project-name dobby_app dobby-app
           cd dobby-app
+          flutter pub add url_launcher
           cp /tmp/backup/main.dart lib/main.dart
           flutter build apk --release
 
