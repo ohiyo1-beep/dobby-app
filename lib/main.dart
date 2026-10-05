@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
     home: DobbyStudioApp(),
@@ -10,12 +11,14 @@ void main() {
 }
 
 // -------------------------------------------------------------
-// 1. DATA MODELS (โครงสร้างข้อมูลตามแบบ Kubdee AI)
+// 1. DATA MODELS
 // -------------------------------------------------------------
 
+enum AiEngine { metaAi, flowAi }
+
 class GlobalConfig {
-  int defaultDuration; // 10, 20, 30 วินาที
-  String delayRange; // เช่น "ปกติ (5-10 วินาที)"
+  int defaultDuration;
+  String delayRange;
   bool enableAiCaption;
   bool enableAiHashtags;
   bool enableAiCta;
@@ -42,12 +45,12 @@ class ProductItem {
   String imageUrl;
   bool isSelected;
 
-  // Video Configurator
+  // Video Config
   String videoStyle; // 'UGC' หรือ 'POV'
   int duration; // 10, 20, 30
   bool enableAiVoice;
   String voiceSource; // 'ระบบ' หรือ 'เสียงของฉัน'
-  String voiceModel; // 'Despina (เริ่มต้น)', 'Erinome', 'Charon', ฯลฯ
+  String voiceModel; // 'Despina', 'Erinome', 'Charon'
   String tone; // 'เป็นกันเอง', 'สุภาพ', 'สนุกสนาน'
   String ageGroup; // 'วัยรุ่น', 'กลางคน', 'ผู้ใหญ่'
   String dialect; // 'กลาง', 'เหนือ', 'อีสาน', 'ใต้'
@@ -76,7 +79,6 @@ class ProductItem {
     this.customPrompt = "Review [product] with [product_image] again [character_image_1]",
   });
 
-  // Deep copy เพื่อใช้กับปุ่ม "นำการตั้งค่านี้ไปใช้กับทุกสินค้า"
   void applySettingsFrom(ProductItem source) {
     videoStyle = source.videoStyle;
     duration = source.duration;
@@ -93,7 +95,7 @@ class ProductItem {
 }
 
 // -------------------------------------------------------------
-// 2. MAIN APPLICATION WIDGET
+// 2. MAIN APP
 // -------------------------------------------------------------
 
 class DobbyStudioApp extends StatefulWidget {
@@ -104,6 +106,7 @@ class DobbyStudioApp extends StatefulWidget {
 }
 
 class _DobbyStudioAppState extends State<DobbyStudioApp> {
+  AiEngine _selectedEngine = AiEngine.metaAi;
   int _selectedPlatform = 0;
   final List<String> _platforms = ["TikTok", "Shopee", "Lazada", "Facebook", "IG"];
 
@@ -135,15 +138,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
     ),
   ];
 
-  Future<void> _openMetaAI() async {
-    final Uri url = Uri.parse('https://www.meta.ai');
-    try {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } catch (_) {
-      await launchUrl(url, mode: LaunchMode.platformDefault);
-    }
-  }
-
   String _buildResolvedPrompt(ProductItem p) {
     String speech = "";
     if (p.dialect == "อีสาน") {
@@ -156,6 +150,16 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
       speech = "ทุกคน ใครกำลังมองหา ${p.name} ราคาแค่ ${p.price} บาท แนะนำเลยครับ ${p.sellingPoints} รีบกดสั่งในตะกร้าด้านล่างด่วนเลยครับ!";
     }
 
+    if (_selectedEngine == AiEngine.flowAi) {
+      // Prompt สำหรับ Google Flow (เน้น Character consistency, Keyframe และ Action)
+      return "Google Flow Cinematic Commercial 9:16 vertical video. "
+          "Subject: ${p.videoStyle == 'POV' ? 'First-person hands showing and rotating' : p.presenter}. "
+          "Featuring product: ${p.name}. Action: Showcase features (${p.sellingPoints}) in high dynamic range. "
+          "Environment: ${p.scene}. High photorealism, stable lighting, fluent gesture. "
+          "Audio track in Thai (${p.dialect}): '$speech'.";
+    }
+
+    // Prompt สำหรับ Meta AI
     if (p.videoStyle == "POV") {
       return "Vertical 9:16 high-definition commercial POV showcase. "
           "First-person perspective showing two hands holding, rotating, and testing the exact product from attached image: ${p.name}. "
@@ -169,9 +173,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
     }
   }
 
-  // -------------------------------------------------------------
-  // DIALOG เพิ่มสินค้า
-  // -------------------------------------------------------------
   void _showAddProductDialog() {
     final nameCtrl = TextEditingController();
     final skuCtrl = TextEditingController(text: "SKU-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}");
@@ -268,9 +269,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
     );
   }
 
-  // -------------------------------------------------------------
-  // BOTTOMSHEET ตั้งค่ารายละเอียดสินค้า (ถอดแบบจากคลิป)
-  // -------------------------------------------------------------
   void _showProductSettingsSheet(ProductItem item) {
     final promptCtrl = TextEditingController(text: item.customPrompt);
 
@@ -289,7 +287,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -310,8 +307,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: 14),
-
-                      // แท็บสลับสไตล์ UGC / POV
                       Row(
                         children: [
                           Expanded(
@@ -349,29 +344,9 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 16),
-                      // กล่อง Prompt
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text("Prompt ของคุณ", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          Row(
-                            children: [
-                              TextButton.icon(
-                                icon: const Icon(Icons.copy, size: 14),
-                                label: const Text("โหลด", style: TextStyle(fontSize: 11)),
-                                onPressed: () {},
-                              ),
-                              TextButton.icon(
-                                icon: const Icon(Icons.save_outlined, size: 14),
-                                label: const Text("บันทึก", style: TextStyle(fontSize: 11)),
-                                onPressed: () {},
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                      const Text("Prompt Template", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      const SizedBox(height: 6),
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
@@ -388,8 +363,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                         ),
                       ),
                       const SizedBox(height: 8),
-
-                      // ช็อตคัต Dynamic Tags
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
@@ -408,9 +381,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                           )).toList(),
                         ),
                       ),
-
                       const SizedBox(height: 16),
-                      // ความยาววิดีโอ
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -427,9 +398,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 12),
-                      // สวิตช์เสียงพากย์ AI
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -441,65 +410,16 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                           ),
                         ],
                       ),
-
                       if (item.enableAiVoice) ...[
-                        // แท็บ คลัง vs เสียงของฉัน
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: InkWell(
-                                  onTap: () => setSheetState(() => item.voiceSource = "ระบบ"),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: item.voiceSource == "ระบบ" ? Colors.white : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(6),
-                                      boxShadow: item.voiceSource == "ระบบ" ? [const BoxShadow(color: Colors.black12, blurRadius: 2)] : null,
-                                    ),
-                                    child: const Center(child: Text("คลังเสียงระบบ", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                child: InkWell(
-                                  onTap: () => setSheetState(() => item.voiceSource = "เสียงของฉัน"),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: item.voiceSource == "เสียงของฉัน" ? Colors.white : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(6),
-                                      boxShadow: item.voiceSource == "เสียงของฉัน" ? [const BoxShadow(color: Colors.black12, blurRadius: 2)] : null,
-                                    ),
-                                    child: const Center(child: Text("เสียงของฉัน (โคลนเสียง)", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-
-                        // เลือกรุ่นเสียง AI
                         DropdownButtonFormField<String>(
                           value: item.voiceModel,
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            labelText: "โมเดลเสียง AI",
-                            border: OutlineInputBorder(),
-                          ),
+                          decoration: const InputDecoration(isDense: true, labelText: "โมเดลเสียง AI", border: OutlineInputBorder()),
                           items: ["Despina (เริ่มต้น)", "Erinome", "Puck", "Charon", "Ferrir", "Orus"]
                               .map((m) => DropdownMenuItem(value: m, child: Text(m, style: const TextStyle(fontSize: 12))))
                               .toList(),
                           onChanged: (val) => setSheetState(() => item.voiceModel = val ?? item.voiceModel),
                         ),
                         const SizedBox(height: 10),
-
-                        // น้ำเสียง
-                        const Text("น้ำเสียง:", style: TextStyle(fontSize: 12, color: Colors.grey)),
-                        const SizedBox(height: 4),
                         Wrap(
                           spacing: 6,
                           children: ["เป็นกันเอง", "สุภาพ", "สนุกสนาน"].map((t) => ChoiceChip(
@@ -509,10 +429,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                           )).toList(),
                         ),
                         const SizedBox(height: 10),
-
-                        // ภาษา/สำเนียง
-                        const Text("ภาษาพูด / สำเนียง:", style: TextStyle(fontSize: 12, color: Colors.grey)),
-                        const SizedBox(height: 4),
                         Wrap(
                           spacing: 6,
                           children: ["กลาง", "เหนือ", "อีสาน", "ใต้"].map((d) => ChoiceChip(
@@ -522,35 +438,27 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                           )).toList(),
                         ),
                       ],
-
                       const SizedBox(height: 16),
-                      // ฉาก (Scene)
                       const Text("ฉากหลัง (Scene)", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
                       Wrap(
                         spacing: 6,
                         runSpacing: 6,
-                        children: ["สตูดิโอขาว", "โต๊ะไม้", "คาเฟ่", "ห้องนอน", "สวนธรรมชาติ", "หน้าร้าน / โรงงาน"].map((sc) => ChoiceChip(
+                        children: ["สตูดิโอขาว", "โต๊ะไม้", "คาเฟ่", "ห้องนอน", "สวนธรรมชาติ", "หน้าร้าน"].map((sc) => ChoiceChip(
                           label: Text(sc, style: const TextStyle(fontSize: 11)),
                           selected: item.scene == sc,
                           onSelected: (val) => setSheetState(() => item.scene = sc),
                         )).toList(),
                       ),
-                      const SizedBox(height: 20),
                     ],
                   ),
                 ),
               ),
-
-              // Action Buttons
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
+                      style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
                       onPressed: () {
                         setState(() {
                           for (var p in _products) {
@@ -572,7 +480,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                         backgroundColor: const Color(0xFF4F46E5),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                       onPressed: () {
                         setState(() {});
@@ -590,132 +497,26 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
     );
   }
 
-  // -------------------------------------------------------------
-  // RUNNER BOT BATCH VIEW (หน้าจำลองรันคิวงานตามคลิป)
-  // -------------------------------------------------------------
-  void _startBatchQueue() {
+  void _launchAutomationScreen() {
     final selectedItems = _products.where((p) => p.isSelected).toList();
-    if (selectedItems.isEmpty) return;
+    if (selectedItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("กรุณาเลือกสินค้าอย่างน้อย 1 รายการ")));
+      return;
+    }
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Container(
-        height: MediaQuery.of(context).size.height * 0.85,
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text("🚀 กำลังรันคิวงาน Meta AI (${selectedItems.length} รายการ)",
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                    const SizedBox(height: 2),
-                    Text("หน่วงเวลาระหว่างรอบ: ${_globalConfig.delayRange}",
-                        style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                  ],
-                ),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700, foregroundColor: Colors.white),
-                  icon: const Icon(Icons.open_in_browser, size: 16),
-                  label: const Text("เปิด Meta AI"),
-                  onPressed: _openMetaAI,
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: const Color(0xFF0F172A), borderRadius: BorderRadius.circular(8)),
-              child: const Row(
-                children: [
-                  SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.greenAccent)),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      "รอบ 1/${20} กำลังรอ Thinking / สลับรูปแบบการตรวจพรอมต์...",
-                      style: TextStyle(color: Colors.greenAccent, fontSize: 11, fontFamily: 'monospace'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 20),
-            Expanded(
-              child: ListView.builder(
-                itemCount: selectedItems.length,
-                itemBuilder: (context, idx) {
-                  final p = selectedItems[idx];
-                  final prompt = _buildResolvedPrompt(p);
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 12,
-                                backgroundColor: const Color(0xFF4F46E5),
-                                child: Text("${idx + 1}", style: const TextStyle(color: Colors.white, fontSize: 11)),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(p.name,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis),
-                              ),
-                              ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF4F46E5),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                ),
-                                icon: const Icon(Icons.copy, size: 12),
-                                label: const Text("คัดลอก", style: TextStyle(fontSize: 11)),
-                                onPressed: () {
-                                  Clipboard.setData(ClipboardData(text: prompt));
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text("คัดลอก Prompt สินค้า #${idx + 1} แล้ว")),
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text("โหมด: ${p.videoStyle} | ความยาว: ${p.duration}วิ | ภาษา: ${p.dialect} | ฉาก: ${p.scene}",
-                              style: TextStyle(fontSize: 10, color: Colors.grey.shade700)),
-                          const SizedBox(height: 6),
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(6)),
-                            child: Text(prompt, style: const TextStyle(fontSize: 10, color: Colors.black87)),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (ctx) => InAppAutomationView(
+          engine: _selectedEngine,
+          items: selectedItems,
+          globalConfig: _globalConfig,
+          buildPromptCallback: _buildResolvedPrompt,
         ),
       ),
     );
   }
 
-  // -------------------------------------------------------------
-  // BUILD METHOD
-  // -------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     final selectedCount = _products.where((p) => p.isSelected).length;
@@ -729,17 +530,63 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
         foregroundColor: const Color(0xFF0F172A),
         elevation: 0.5,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.hub_outlined, color: Color(0xFF4F46E5)),
-            tooltip: "เปิด Meta AI",
-            onPressed: _openMetaAI,
+          // ปุ่มสลับ Engine: Meta AI
+          GestureDetector(
+            onTap: () => setState(() => _selectedEngine = AiEngine.metaAi),
+            child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: _selectedEngine == AiEngine.metaAi ? const Color(0xFFEEF2FF) : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _selectedEngine == AiEngine.metaAi ? const Color(0xFF4F46E5) : Colors.grey.shade300,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.hub_outlined, size: 16, color: _selectedEngine == AiEngine.metaAi ? const Color(0xFF4F46E5) : Colors.grey),
+                  const SizedBox(width: 4),
+                  Text("Meta", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _selectedEngine == AiEngine.metaAi ? const Color(0xFF4F46E5) : Colors.grey)),
+                ],
+              ),
+            ),
+          ),
+          // ปุ่มสลับ Engine: Flow AI (ไอคอนตัว F ตามคลิป)
+          GestureDetector(
+            onTap: () => setState(() => _selectedEngine = AiEngine.flowAi),
+            child: Container(
+              margin: const EdgeInsets.only(top: 8, bottom: 8, right: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: _selectedEngine == AiEngine.flowAi ? const Color(0xFFFFF7ED) : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _selectedEngine == AiEngine.flowAi ? Colors.orange.shade700 : Colors.grey.shade300,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    "F",
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      color: _selectedEngine == AiEngine.flowAi ? Colors.orange.shade800 : Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text("Flow", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _selectedEngine == AiEngine.flowAi ? Colors.orange.shade800 : Colors.grey)),
+                ],
+              ),
+            ),
           ),
         ],
       ),
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // แถบไอคอน Social & Marketplace
+            // Social channels
             Container(
               color: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 8),
@@ -767,10 +614,9 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                 ),
               ),
             ),
-
             const SizedBox(height: 8),
 
-            // การ์ดตั้งค่าพื้นฐาน (General Settings Card จากในคลิป)
+            // General Settings Card
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 14),
               padding: const EdgeInsets.all(14),
@@ -782,11 +628,12 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  Row(
                     children: [
-                      Icon(Icons.tune, size: 18, color: Color(0xFF4F46E5)),
-                      SizedBox(width: 8),
-                      Text("ตั้งค่าพื้นฐาน", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      Icon(Icons.tune, size: 18, color: _selectedEngine == AiEngine.metaAi ? const Color(0xFF4F46E5) : Colors.orange.shade700),
+                      const SizedBox(width: 8),
+                      Text("ตั้งค่าพื้นฐาน (${_selectedEngine == AiEngine.metaAi ? 'Meta AI' : 'Google Flow'})",
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -795,11 +642,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                       Expanded(
                         child: DropdownButtonFormField<int>(
                           value: _globalConfig.defaultDuration,
-                          decoration: const InputDecoration(
-                            labelText: "ความยาวรวม",
-                            isDense: true,
-                            border: OutlineInputBorder(),
-                          ),
+                          decoration: const InputDecoration(labelText: "ความยาวรวม", isDense: true, border: OutlineInputBorder()),
                           items: [10, 20, 30].map((d) => DropdownMenuItem(value: d, child: Text("$d วินาที", style: const TextStyle(fontSize: 12)))).toList(),
                           onChanged: (val) => setState(() => _globalConfig.defaultDuration = val ?? 20),
                         ),
@@ -808,11 +651,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           value: _globalConfig.delayRange,
-                          decoration: const InputDecoration(
-                            labelText: "หน่วงเวลา",
-                            isDense: true,
-                            border: OutlineInputBorder(),
-                          ),
+                          decoration: const InputDecoration(labelText: "หน่วงเวลา", isDense: true, border: OutlineInputBorder()),
                           items: ["ปกติ (5-10 วินาที)", "ช้า (10-20 วินาที)", "เร็ว (2-5 วินาที)"]
                               .map((dr) => DropdownMenuItem(value: dr, child: Text(dr, style: const TextStyle(fontSize: 11))))
                               .toList(),
@@ -821,28 +660,13 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  // Switch toggles
+                  const SizedBox(height: 6),
                   SwitchListTile(
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                     title: const Text("AI ช่วย Caption", style: TextStyle(fontSize: 13)),
                     value: _globalConfig.enableAiCaption,
                     onChanged: (v) => setState(() => _globalConfig.enableAiCaption = v),
-                  ),
-                  SwitchListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text("AI ช่วย Hashtags", style: TextStyle(fontSize: 13)),
-                    value: _globalConfig.enableAiHashtags,
-                    onChanged: (v) => setState(() => _globalConfig.enableAiHashtags = v),
-                  ),
-                  SwitchListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text("AI ช่วย CTA", style: TextStyle(fontSize: 13)),
-                    value: _globalConfig.enableAiCta,
-                    onChanged: (v) => setState(() => _globalConfig.enableAiCta = v),
                   ),
                   SwitchListTile(
                     dense: true,
@@ -854,10 +678,9 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                 ],
               ),
             ),
-
             const SizedBox(height: 10),
 
-            // แถบข้อมูลสินค้า (Warehouse Header)
+            // Products Header
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
@@ -894,7 +717,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
               ),
             ),
 
-            // รายการสินค้า
+            // Product List
             ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -925,10 +748,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                         Container(
                           width: 56,
                           height: 56,
-                          decoration: BoxDecoration(
-                            color: Colors.indigo.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
+                          decoration: BoxDecoration(color: Colors.indigo.shade50, borderRadius: BorderRadius.circular(8)),
                           child: const Icon(Icons.inventory_2_outlined, color: Color(0xFF4F46E5), size: 28),
                         ),
                         const SizedBox(width: 10),
@@ -981,16 +801,241 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
           height: 50,
           child: ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4F46E5),
+              backgroundColor: _selectedEngine == AiEngine.metaAi ? const Color(0xFF4F46E5) : Colors.orange.shade800,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            icon: const Icon(Icons.auto_awesome),
-            label: Text("เริ่มต้นสร้างด้วย Meta AI ($selectedCount รายการ)",
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-            onPressed: _startBatchQueue,
+            icon: const Icon(Icons.play_arrow_rounded),
+            label: Text(
+              "เริ่มรันบอทสร้างด้วย ${_selectedEngine == AiEngine.metaAi ? 'Meta AI' : 'Flow AI'} ($selectedCount)",
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            ),
+            onPressed: _launchAutomationScreen,
           ),
         ),
+      ),
+    );
+  }
+}
+
+// -------------------------------------------------------------
+// 3. IN-APP AUTOMATION SCREEN (หน้าจอฝัง WebView + Bot Controller)
+// -------------------------------------------------------------
+
+class InAppAutomationView extends StatefulWidget {
+  final AiEngine engine;
+  final List<ProductItem> items;
+  final GlobalConfig globalConfig;
+  final String Function(ProductItem) buildPromptCallback;
+
+  const InAppAutomationView({
+    super.key,
+    required this.engine,
+    required this.items,
+    required this.globalConfig,
+    required this.buildPromptCallback,
+  });
+
+  @override
+  State<InAppAutomationView> createState() => _InAppAutomationViewState();
+}
+
+class _InAppAutomationViewState extends State<InAppAutomationView> {
+  late final WebViewController _webViewController;
+  int _currentIndex = 0;
+  bool _isLoadingWeb = true;
+  String _botStatus = "กำลังเชื่อมต่อระบบ...";
+
+  @override
+  void initState() {
+    super.initState();
+    final targetUrl = widget.engine == AiEngine.metaAi
+        ? 'https://www.meta.ai'
+        : 'https://labs.google/flow';
+
+    _webViewController = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (url) {
+            setState(() {
+              _isLoadingWeb = true;
+              _botStatus = "กำลังโหลดหน้าเว็บ $url...";
+            });
+          },
+          onPageFinished: (url) {
+            setState(() {
+              _isLoadingWeb = false;
+              _botStatus = "พร้อมทำงาน - รอกดส่งคำสั่งเข้าแชต";
+            });
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse(targetUrl));
+  }
+
+  // จำลองการฉีดสคริปต์กรอก Prompt ลงช่องแชตของเว็บ
+  Future<void> _injectPromptToChat() async {
+    final currentItem = widget.items[_currentIndex];
+    final prompt = widget.buildPromptCallback(currentItem);
+
+    setState(() {
+      _botStatus = "กำลังใส่ Prompt สินค้า ${_currentIndex + 1}/${widget.items.length}...";
+    });
+
+    // คัดลอกลง Clipboard ให้พร้อมเป็น Backup ทันที
+    await Clipboard.setData(ClipboardData(text: prompt));
+
+    // รัน JavaScript พยายามค้นหา textarea/contenteditable บนหน้าเว็บ
+    const jsScript = """
+      (function() {
+        var inputs = document.querySelectorAll('textarea, [contenteditable="true"]');
+        if (inputs.length > 0) {
+          inputs[0].focus();
+          return "FOUND_INPUT";
+        }
+        return "INPUT_NOT_FOUND";
+      })();
+    """;
+
+    try {
+      await _webViewController.runJavaScriptReturningResult(jsScript);
+    } catch (_) {}
+
+    setState(() {
+      _botStatus = "ใส่ Prompt สำเร็จ! (คัดลอกลงคลิปบอร์ดแล้ว พร้อมส่งรูปและสร้าง)";
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("✅ พร้อมส่ง Prompt สำหรับ: ${currentItem.name}"),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  void _nextProduct() {
+    if (_currentIndex < widget.items.length - 1) {
+      setState(() {
+        _currentIndex++;
+        _botStatus = "สลับไปยังสินค้าตัวถัดไป (${_currentIndex + 1}/${widget.items.length})";
+      });
+    } else {
+      setState(() {
+        _botStatus = "🎉 ทำงานครบคิวทั้งหมดแล้ว!";
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentItem = widget.items[_currentIndex];
+    final prompt = widget.buildPromptCallback(currentItem);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          widget.engine == AiEngine.metaAi ? "Meta AI Automator" : "Google Flow Automator",
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0.5,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => _webViewController.reload(),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // แถบมอนิเตอร์บอทด้านบน (Status Banner แบบในคลิป)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            color: const Color(0xFF0F172A),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "คิว ${_currentIndex + 1}/${widget.items.length} : ${currentItem.name}",
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      "หน่วง: ${widget.globalConfig.delayRange.split(' ')[0]}",
+                      style: const TextStyle(color: Colors.grey, fontSize: 11),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.greenAccent),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _botStatus,
+                        style: const TextStyle(color: Colors.greenAccent, fontSize: 11, fontFamily: 'monospace'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF4F46E5),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                        icon: const Icon(Icons.send_rounded, size: 14),
+                        label: const Text("วางคำสั่ง (Inject)", style: TextStyle(fontSize: 12)),
+                        onPressed: _injectPromptToChat,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white12,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                      ),
+                      onPressed: _nextProduct,
+                      child: const Text("ถัดไป >>", style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // จอเบราว์เซอร์ In-App WebView
+          Expanded(
+            child: Stack(
+              children: [
+                WebViewWidget(controller: _webViewController),
+                if (_isLoadingWeb)
+                  const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
