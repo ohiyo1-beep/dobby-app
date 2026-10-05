@@ -24,26 +24,27 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Build Standalone APK with In-App WebView
+      - name: Build Standalone APK with In-App WebView and Image Picker
         run: |
           rm -rf /tmp/dobby_build
           flutter create --org com.dobbystudio --project-name dobby_app /tmp/dobby_build
           cd /tmp/dobby_build
           
-          # ติดตั้งแพ็กเกจที่จำเป็นสำหรับ In-App Browser และ URL
+          # ติดตั้งแพ็กเกจที่จำเป็น
           flutter pub add url_launcher
           flutter pub add webview_flutter
+          flutter pub add image_picker
           
           # คัดลอกโค้ด main.dart เข้าโปรเจกต์
           cp $GITHUB_WORKSPACE/lib/main.dart lib/main.dart
           
-          # ตั้งค่า minSdkVersion เป็น 21 ใน build.gradle เพื่อรองรับ WebView
+          # ตั้งค่า minSdkVersion เป็น 21 ใน build.gradle
           sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle || true
           sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/g' android/app/build.gradle || true
           
-          # เพิ่มสิทธิ์ Permission ใน AndroidManifest.xml
+          # เพิ่มสิทธิ์ Permission ใน AndroidManifest.xml (Internet + Storage + Media Images)
           MANIFEST_FILE="android/app/src/main/AndroidManifest.xml"
-          sed -i '/<manifest xmlns:android/a \    <uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"\/>' $MANIFEST_FILE
+          sed -i '/<manifest xmlns:android/a \    <uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"\/>\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"\/>\n    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"\/>' $MANIFEST_FILE
           
           # สั่งบิลด์ไฟล์ APK Release
           flutter build apk --release --no-tree-shake-icons
