@@ -108,7 +108,27 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
     }
   }
 
-  // ระบบดึงข้อมูลผ่าน WebView เบื้องหลัง (ทำงานในแอป Dobby ตัวเดียว ไม่ต้องสลับแอป)
+  // ดึงชื่อสินค้าจาก URL ปลายทางที่ Redirect สำเร็จ
+  String? _parseTitleFromUrl(String url) {
+    try {
+      final uri = Uri.parse(url);
+      for (var seg in uri.pathSegments) {
+        String decoded = Uri.decodeComponent(seg);
+        if (decoded.length > 5 &&
+            !decoded.startsWith("universal-link") &&
+            !decoded.startsWith("item") &&
+            !decoded.startsWith("product") &&
+            !decoded.contains("shopee.co.th")) {
+          // ล้างพวกขีดกลางและ slug ให้เป็นชื่อสินค้า
+          String cleaned = decoded.replaceAll('-', ' ').replaceAll('_', ' ').replaceAll('-i.', ' ');
+          cleaned = cleaned.replaceAll(RegExp(r'\b\d{6,}\b'), '').trim();
+          if (cleaned.length > 5) return cleaned;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
   void _fetchWithHiddenBrowser(
     String rawInput,
     TextEditingController nameCtrl,
@@ -118,7 +138,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
     String text = rawInput.trim();
     if (text.isEmpty) return;
 
-    // 1. ตรวจสอบว่ามีข้อความติดมากับลิงก์หรือไม่
     final urlRegex = RegExp(r'https?://[^\s]+');
     final match = urlRegex.firstMatch(text);
 
@@ -126,37 +145,53 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
       final targetUrl = match.group(0)!;
       final beforeUrl = text.substring(0, match.start).trim();
 
-      // ถ้าแชร์ติดชื่อมา ดึงมาใช้ทันที
       if (beforeUrl.length > 5) {
         nameCtrl.text = beforeUrl.replaceAll(RegExp(r'[\r\n]+'), ' ');
         refreshUI();
         return;
       }
 
-      // 2. ถ้าเป็นลิงก์ย่อ ให้เปิด Webview ภายในเครื่องเพื่อวิ่งตาม Redirect จริง
       setBusy(true);
 
       late final WebViewController controller;
       controller = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setUserAgent("Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36")
+        // จำลองเป็น Desktop Browser เพื่อป้องกัน Shopee บังคับเด้งแอปหรือตัดหน้าเว็บ
+        ..setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
         ..setNavigationDelegate(
           NavigationDelegate(
-            onPageFinished: (String url) async {
-              // รอให้หน้าเว็บ Render DOM 1.5 วินาที
-              await Future.delayed(const Duration(milliseconds: 1500));
+            onNavigationRequest: (NavigationRequest request) {
+              // ดักจับชื่อสินค้าจาก URL ระหว่างที่มีการ Redirect
+              final extracted = _parseTitleFromUrl(request.url);
+              if (extracted != null && extracted.isNotEmpty) {
+                nameCtrl.text = extracted;
+                refreshUI();
+              }
+              return NavigationDecision.navigate;
+            },
+            onPageFinished: (String finalUrl) async {
+              // 1. ลองแกะชื่อจาก URL ปลายทาง
+              final urlTitle = _parseTitleFromUrl(finalUrl);
+              if (urlTitle != null && urlTitle.isNotEmpty) {
+                nameCtrl.text = urlTitle;
+              }
+
+              // 2. ดึงจาก Title ของหน้าเว็บ
               try {
-                // ดึง Title ของเว็บ
-                final title = await controller.getTitle();
-                if (title != null && title.trim().isNotEmpty) {
-                  String cleaned = title
+                final pageTitle = await controller.getTitle();
+                if (pageTitle != null && pageTitle.trim().isNotEmpty) {
+                  String cleaned = pageTitle
                       .replaceAll(" | Shopee Thailand", "")
                       .replaceAll(" | TikTok", "")
                       .replaceAll(" | Lazada.co.th", "")
                       .replaceAll("Shopee Thailand", "")
                       .trim();
 
-                  if (cleaned.length > 3 && !cleaned.toLowerCase().contains("robot") && !cleaned.toLowerCase().contains("captcha")) {
+                  // กรองคำขยะที่เกิดจากข้อผิดพลาด
+                  const blockedWords = ["หน้าเว็บไม่พร้อมใช้งาน", "error", "captcha", "robot", "shopee", "tiktok"];
+                  bool isGarbage = blockedWords.any((w) => cleaned.toLowerCase().contains(w));
+
+                  if (!isGarbage && cleaned.length > 3) {
                     nameCtrl.text = cleaned;
                   }
                 }
@@ -173,8 +208,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
         )
         ..loadRequest(Uri.parse(targetUrl));
 
-      // กำหนด Timeout ป้องกันกรณีเน็ตช้าเกิน 7 วินาที
-      Timer(const Duration(seconds: 7), () {
+      Timer(const Duration(seconds: 8), () {
         setBusy(false);
         refreshUI();
       });
@@ -219,7 +253,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                 ),
                 const SizedBox(height: 10),
 
-                // กล่องนำเข้าจากลิงก์
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
