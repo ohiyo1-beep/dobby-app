@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -11,7 +13,6 @@ void main() {
   ));
 }
 
-// โมเดลข้อมูลสินค้าแต่ละรายการ
 class ProductItem {
   final String id;
   String name;
@@ -21,10 +22,9 @@ class ProductItem {
   String? productUrl;
   bool isSelected;
 
-  // การตั้งค่าวิดีโอประจำสินค้านั้นๆ
-  String videoStyle; // 'UGC' หรือ 'POV'
-  int duration; // 10, 20, 30
-  String dialect; // กลาง, เหนือ, อีสาน, ใต้
+  String videoStyle;
+  int duration;
+  String dialect;
   String scene;
 
   ProductItem({
@@ -52,11 +52,9 @@ class DobbyStudioApp extends StatefulWidget {
 class _DobbyStudioAppState extends State<DobbyStudioApp> {
   final ImagePicker _picker = ImagePicker();
 
-  // แพลตฟอร์มเป้าหมาย
   int _selectedPlatform = 0;
   final List<String> _platforms = ["TikTok", "Shopee", "Lazada", "Facebook", "IG"];
 
-  // รายการสินค้าในคลัง
   final List<ProductItem> _products = [
     ProductItem(
       id: "PROD-001",
@@ -80,17 +78,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
       dialect: "อีสาน",
       scene: "โรงงาน / หน้าร้าน",
     ),
-    ProductItem(
-      id: "PROD-003",
-      name: "หมวกแก๊ป Unisex ผ้ายีนส์ฟอก ทรงสวย ระบายอากาศดี",
-      sellingPoints: "ดีไซน์มินิมอล ใส่ได้ทั้งชายหญิง แมตช์ง่ายทุกชุด",
-      price: "189",
-      isSelected: false,
-      videoStyle: "UGC",
-      duration: 20,
-      dialect: "กลาง",
-      scene: "คาเฟ่โมเดิร์น",
-    ),
   ];
 
   Future<void> _openMetaAI() async {
@@ -102,7 +89,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
     }
   }
 
-  // สร้าง Prompt ตามข้อมูลของสินค้าแต่ละชิ้น
   String _buildPromptFor(ProductItem p) {
     String speech = "";
     if (p.dialect == "อีสาน") {
@@ -122,30 +108,83 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
     }
   }
 
-  // ตัวแยกดึงชื่อสินค้าและข้อความจากลิงก์หรือข้อความที่คัดลอกมา
-  void _extractProductInfo(String input, TextEditingController nameCtrl, TextEditingController priceCtrl) {
-    if (input.isEmpty) return;
-    
-    // ถ้าผู้ใช้ก๊อปปี้ข้อความแชร์จาก Shopee/TikTok ที่ติดชื่อสินค้ามาด้วย
-    String cleaned = input.trim();
-    if (cleaned.contains("http://") || cleaned.contains("https://")) {
-      // ดึงข้อความส่วนหัวก่อนถึงลิงก์ (ถ้ามี)
-      final parts = cleaned.split(RegExp(r'https?://'));
-      if (parts[0].trim().isNotEmpty) {
-        nameCtrl.text = parts[0].replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+  // ระบบดึงข้อมูลจากลิงก์เว็บแบบฉลาด
+  Future<void> _fetchLinkDetails(String rawText, TextEditingController nameCtrl, TextEditingController priceCtrl) async {
+    final text = rawText.trim();
+    if (text.isEmpty) return;
+
+    // 1. ตรวจสอบว่ามีข้อความติดมากับลิงก์หรือไม่ (กรณีแชร์จากแอป)
+    final urlRegex = RegExp(r'https?://[^\s]+');
+    final match = urlRegex.firstMatch(text);
+
+    if (match != null) {
+      final url = match.group(0)!;
+      final beforeUrl = text.substring(0, match.start).trim();
+
+      if (beforeUrl.length > 5) {
+        nameCtrl.text = beforeUrl.replaceAll(RegExp(r'[\r\n]+'), ' ');
+        return;
       }
+
+      // 2. ถ้าเป็นลิงก์เพียวๆ ให้ลองยิง Request ไปดึง Title ของเว็บ
+      try {
+        final res = await http.get(
+          Uri.parse(url),
+          headers: {
+            'User-Agent':
+                'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+          },
+        ).timeout(const Duration(seconds: 4));
+
+        if (res.statusCode == 200) {
+          final body = utf8.decode(res.bodyBytes, allowMalformed: true);
+
+          // หา og:title หรือ title
+          final ogMatch = RegExp(r'<meta property="og:title" content="([^"]+)"').firstMatch(body);
+          final titleMatch = RegExp(r'<title>([^<]+)</title>').firstMatch(body);
+
+          String? foundTitle = ogMatch?.group(1) ?? titleMatch?.group(1);
+
+          if (foundTitle != null && foundTitle.isNotEmpty) {
+            foundTitle = foundTitle
+                .replaceAll(" | Shopee Thailand", "")
+                .replaceAll(" | TikTok", "")
+                .replaceAll(" | Lazada.co.th", "")
+                .trim();
+            nameCtrl.text = foundTitle;
+            return;
+          }
+        }
+      } catch (_) {
+        // หากติดบล็อก Cloudflare ให้พยายามแกะชื่อจากข้อความใน URL
+      }
+
+      // 3. Fallback: ถอดรหัสชื่อสินค้าจากตัว URL เอง
+      try {
+        final uri = Uri.parse(url);
+        final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+        if (segments.isNotEmpty) {
+          String slug = Uri.decodeComponent(segments.first);
+          slug = slug.replaceAll('-', ' ').replaceAll('_', ' ');
+          if (slug.length > 5 && !slug.contains("http")) {
+            nameCtrl.text = slug;
+            return;
+          }
+        }
+      } catch (_) {}
     } else {
-      nameCtrl.text = cleaned;
+      // ถ้าพิมพ์ชื่อเข้ามาตรงๆ
+      nameCtrl.text = text;
     }
   }
 
-  // หน้าต่างเพิ่มสินค้าเข้าคลัง (มีช่องวางลิงก์ Shopee / TikTok)
   void _showAddProductDialog() {
     final urlCtrl = TextEditingController();
     final nameCtrl = TextEditingController();
     final pointCtrl = TextEditingController();
     final priceCtrl = TextEditingController();
     String? pickedImagePath;
+    bool isLoading = false;
 
     showModalBottomSheet(
       context: context,
@@ -174,7 +213,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                 ),
                 const SizedBox(height: 10),
 
-                // ช่องนำเข้าจากลิงก์ Shopee / TikTok
+                // กล่องนำเข้าจากลิงก์
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -200,7 +239,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                             child: TextField(
                               controller: urlCtrl,
                               decoration: InputDecoration(
-                                hintText: "วางลิงก์สินค้า หรือข้อความแชร์ที่นี่...",
+                                hintText: "วางลิงก์ หรือข้อความแชร์สินค้า...",
                                 hintStyle: const TextStyle(fontSize: 12),
                                 isDense: true,
                                 filled: true,
@@ -214,17 +253,29 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF4F46E5),
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                             ),
-                            onPressed: () {
-                              _extractProductInfo(urlCtrl.text, nameCtrl, priceCtrl);
-                              setModalState(() {});
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text("✨ ดึงข้อมูลจากลิงก์เรียบร้อย! กรุณาตรวจสอบรายละเอียด")),
-                              );
-                            },
-                            child: const Text("ดึงข้อมูล", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            onPressed: isLoading
+                                ? null
+                                : () async {
+                                    setModalState(() => isLoading = true);
+                                    await _fetchLinkDetails(urlCtrl.text, nameCtrl, priceCtrl);
+                                    setModalState(() => isLoading = false);
+
+                                    if (nameCtrl.text.isNotEmpty) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text("✨ ดึงชื่อสินค้าสำเร็จแล้ว!")),
+                                      );
+                                    } else {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text("ระบบดึงชื่อไม่สำเร็จ กรุณาพิมพ์ชื่อสินค้าเองครับ")),
+                                      );
+                                    }
+                                  },
+                            child: isLoading
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Text("ดึงข้อมูล", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                           ),
                         ],
                       ),
@@ -233,7 +284,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                 ),
                 const SizedBox(height: 14),
 
-                // รูปและข้อมูลทั่วไป
                 Row(
                   children: [
                     GestureDetector(
@@ -291,7 +341,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                   maxLines: 2,
                   decoration: const InputDecoration(
                     labelText: "จุดเด่น / จุดขายสำคัญ",
-                    hintText: "เช่น เนื้อผ้านุ่ม ระบายอากาศดี หรือ คมชัด 4K กันน้ำ",
+                    hintText: "เช่น สวมใส่สบาย ระบายอากาศดี หรือ ติดตั้งง่าย คมชัด 4K",
                     isDense: true,
                     border: OutlineInputBorder(),
                   ),
@@ -332,7 +382,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
     );
   }
 
-  // หน้าต่างปรับการตั้งค่าสไตล์คลิปรายสินค้า
   void _showSettingsSheet(ProductItem item) {
     showModalBottomSheet(
       context: context,
@@ -358,7 +407,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
               ),
               const Divider(),
               const SizedBox(height: 6),
-              // สไตล์คลิป
               Row(
                 children: [
                   Expanded(
@@ -379,7 +427,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                 ],
               ),
               const SizedBox(height: 12),
-              // ความยาวคลิป
               const Text("ความยาววิดีโอ:", style: TextStyle(fontSize: 12, color: Colors.grey)),
               const SizedBox(height: 6),
               Row(
@@ -393,7 +440,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                 )).toList(),
               ),
               const SizedBox(height: 12),
-              // สำเนียง
               const Text("ภาษาสำเนียงพูด:", style: TextStyle(fontSize: 12, color: Colors.grey)),
               const SizedBox(height: 6),
               Wrap(
@@ -445,7 +491,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
     );
   }
 
-  // หน้าจอแสดงคิว Prompt
   void _startBatchQueue() {
     final selectedItems = _products.where((p) => p.isSelected).toList();
     if (selectedItems.isEmpty) {
@@ -557,7 +602,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
       ),
       body: Column(
         children: [
-          // แถบแพลตฟอร์ม
           Container(
             color: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -587,7 +631,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
           ),
           const Divider(height: 1),
 
-          // แถบควบคุมคลังสินค้า
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
             child: Row(
@@ -626,7 +669,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
             ),
           ),
 
-          // รายการการ์ดสินค้าในคลัง
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -650,7 +692,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                           activeColor: const Color(0xFF4F46E5),
                           onChanged: (val) => setState(() => item.isSelected = val ?? false),
                         ),
-                        // รูปสินค้า
                         Container(
                           width: 58,
                           height: 58,
@@ -667,7 +708,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                               : const Icon(Icons.inventory_2_outlined, color: Colors.grey, size: 26),
                         ),
                         const SizedBox(width: 10),
-                        // รายละเอียด
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -718,7 +758,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
             ),
           ),
 
-          // ปุ่มเริ่มสร้างวิดีโอ
           Container(
             padding: const EdgeInsets.all(16),
             decoration: const BoxDecoration(
