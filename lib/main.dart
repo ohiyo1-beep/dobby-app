@@ -108,92 +108,74 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
     }
   }
 
-  // ดึงชื่อสินค้าจาก URL ปลายทางที่ Redirect สำเร็จ
-  String? _parseTitleFromUrl(String url) {
-    try {
-      final uri = Uri.parse(url);
-      for (var seg in uri.pathSegments) {
-        String decoded = Uri.decodeComponent(seg);
-        if (decoded.length > 5 &&
-            !decoded.startsWith("universal-link") &&
-            !decoded.startsWith("item") &&
-            !decoded.startsWith("product") &&
-            !decoded.contains("shopee.co.th")) {
-          // ล้างพวกขีดกลางและ slug ให้เป็นชื่อสินค้า
-          String cleaned = decoded.replaceAll('-', ' ').replaceAll('_', ' ').replaceAll('-i.', ' ');
-          cleaned = cleaned.replaceAll(RegExp(r'\b\d{6,}\b'), '').trim();
-          if (cleaned.length > 5) return cleaned;
-        }
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  void _fetchWithHiddenBrowser(
+  // ระบบแกะข้อมูลจากข้อความแชร์และตรวจจับชื่อสินค้าจริง
+  void _parseSmartText(
     String rawInput,
     TextEditingController nameCtrl,
+    TextEditingController priceCtrl,
     Function(bool) setBusy,
     Function() refreshUI,
   ) {
     String text = rawInput.trim();
     if (text.isEmpty) return;
 
+    // 1. ถ้าเป็นการคัดลอกข้อมูลแชร์จาก Shopee (ที่มีชื่อสินค้าติดมาด้วย)
     final urlRegex = RegExp(r'https?://[^\s]+');
     final match = urlRegex.firstMatch(text);
 
     if (match != null) {
       final targetUrl = match.group(0)!;
-      final beforeUrl = text.substring(0, match.start).trim();
+      String beforeUrl = text.substring(0, match.start).trim();
 
-      if (beforeUrl.length > 5) {
-        nameCtrl.text = beforeUrl.replaceAll(RegExp(r'[\r\n]+'), ' ');
+      // สกัดราคาถ้ามี เช่น ฿1,290 หรือ 1290 บาท
+      final priceMatch = RegExp(r'(?:฿|THB|ราคา\s*)?([0-9,]+)(?:\s*บาท|\s*฿)?').firstMatch(text);
+      if (priceMatch != null) {
+        String p = priceMatch.group(1)!.replaceAll(',', '');
+        if (p.length >= 2 && p.length <= 6) {
+          priceCtrl.text = p;
+        }
+      }
+
+      // ตรวจสอบว่ามีชื่อสินค้าอยู่ก่อนลิงก์หรือไม่
+      if (beforeUrl.length > 5 &&
+          !beforeUrl.contains("Shopee") &&
+          !beforeUrl.contains("ซื้อขายผ่านมือถือ")) {
+        nameCtrl.text = beforeUrl.replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
         refreshUI();
         return;
       }
 
+      // 2. ถ้าเป็นลิงก์ย่ออย่างเดียว ให้ใช้ WebView เจาะอ่านตัวสินค้าจริง
       setBusy(true);
 
       late final WebViewController controller;
       controller = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        // จำลองเป็น Desktop Browser เพื่อป้องกัน Shopee บังคับเด้งแอปหรือตัดหน้าเว็บ
-        ..setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+        ..setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
         ..setNavigationDelegate(
           NavigationDelegate(
-            onNavigationRequest: (NavigationRequest request) {
-              // ดักจับชื่อสินค้าจาก URL ระหว่างที่มีการ Redirect
-              final extracted = _parseTitleFromUrl(request.url);
-              if (extracted != null && extracted.isNotEmpty) {
-                nameCtrl.text = extracted;
-                refreshUI();
-              }
-              return NavigationDecision.navigate;
-            },
             onPageFinished: (String finalUrl) async {
-              // 1. ลองแกะชื่อจาก URL ปลายทาง
-              final urlTitle = _parseTitleFromUrl(finalUrl);
-              if (urlTitle != null && urlTitle.isNotEmpty) {
-                nameCtrl.text = urlTitle;
-              }
-
-              // 2. ดึงจาก Title ของหน้าเว็บ
+              await Future.delayed(const Duration(milliseconds: 2000));
               try {
-                final pageTitle = await controller.getTitle();
-                if (pageTitle != null && pageTitle.trim().isNotEmpty) {
-                  String cleaned = pageTitle
-                      .replaceAll(" | Shopee Thailand", "")
-                      .replaceAll(" | TikTok", "")
-                      .replaceAll(" | Lazada.co.th", "")
-                      .replaceAll("Shopee Thailand", "")
-                      .trim();
+                // รัน JavaScript ดึงชื่อสินค้าจากแท็ก h1 หรือ meta tag โดยตรง
+                final jsResult = await controller.runJavaScriptReturningResult(
+                  "document.querySelector('meta[property=\"og:title\"]')?.content || document.querySelector('h1')?.innerText || document.title || ''",
+                );
 
-                  // กรองคำขยะที่เกิดจากข้อผิดพลาด
-                  const blockedWords = ["หน้าเว็บไม่พร้อมใช้งาน", "error", "captcha", "robot", "shopee", "tiktok"];
-                  bool isGarbage = blockedWords.any((w) => cleaned.toLowerCase().contains(w));
+                String pageTitle = jsResult.toString().replaceAll('"', '').trim();
 
-                  if (!isGarbage && cleaned.length > 3) {
-                    nameCtrl.text = cleaned;
-                  }
+                // กรองข้อความสโลแกนของ Shopee ออกทิ้ง
+                pageTitle = pageTitle
+                    .replaceAll(" | Shopee Thailand", "")
+                    .replaceAll("Shopee Thailand", "")
+                    .replaceAll("ซื้อขายผ่านมือถือ หรือออนไลน์", "")
+                    .replaceAll("ซื้อขายผ่านมือถือ", "")
+                    .replaceAll("หน้าเว็บไม่พร้อมใช้งาน", "")
+                    .replaceAll(RegExp(r'^[\s\|-]+|[\s\|-]+$'), '')
+                    .trim();
+
+                if (pageTitle.length > 3) {
+                  nameCtrl.text = pageTitle;
                 }
               } catch (_) {}
 
@@ -253,6 +235,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                 ),
                 const SizedBox(height: 10),
 
+                // แนะนำการใช้งาน
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -267,7 +250,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                         children: [
                           Icon(Icons.link, size: 16, color: Color(0xFF4F46E5)),
                           SizedBox(width: 6),
-                          Text("วางลิงก์สินค้า (Shopee / TikTok / Lazada)",
+                          Text("วางลิงก์ หรือข้อความแชร์สินค้า",
                               style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF4F46E5))),
                         ],
                       ),
@@ -278,7 +261,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                             child: TextField(
                               controller: urlCtrl,
                               decoration: InputDecoration(
-                                hintText: "วางลิงก์สินค้าที่นี่...",
+                                hintText: "วางลิงก์ หรือกด 'คัดลอกข้อมูลและแชร์' มาวาง...",
                                 hintStyle: const TextStyle(fontSize: 12),
                                 isDense: true,
                                 filled: true,
@@ -298,9 +281,10 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                             onPressed: isScraping
                                 ? null
                                 : () {
-                                    _fetchWithHiddenBrowser(
+                                    _parseSmartText(
                                       urlCtrl.text,
                                       nameCtrl,
+                                      priceCtrl,
                                       (val) => setModalState(() => isScraping = val),
                                       () => setModalState(() {}),
                                     );
@@ -373,7 +357,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                   maxLines: 2,
                   decoration: const InputDecoration(
                     labelText: "จุดเด่น / จุดขายสำคัญ",
-                    hintText: "เช่น สวมใส่สบาย ระบายอากาศดี หรือ ติดตั้งง่าย คมชัด 4K",
+                    hintText: "เช่น ปั๊มน้ำออโต้ มอเตอร์ทองแดงแท้ แรงดันสม่ำเสมอ",
                     isDense: true,
                     border: OutlineInputBorder(),
                   ),
