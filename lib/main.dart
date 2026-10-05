@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -44,18 +45,18 @@ class ProductItem {
   String name;
   String price;
   String sellingPoints;
-  String? imagePath; // พาธไฟล์รูปในเครื่องจริง
+  String? imagePath;
   bool isSelected;
 
   // Video Config
   String videoStyle; // 'UGC' หรือ 'POV'
   int duration; // 10, 20, 30
   bool enableAiVoice;
-  String voiceSource; // 'ระบบ' หรือ 'เสียงของฉัน'
-  String voiceModel; // 'Despina', 'Erinome', 'Charon'
-  String tone; // 'เป็นกันเอง', 'สุภาพ', 'สนุกสนาน'
-  String ageGroup; // 'วัยรุ่น', 'กลางคน', 'ผู้ใหญ่'
-  String dialect; // 'กลาง', 'เหนือ', 'อีสาน', 'ใต้'
+  String voiceSource;
+  String voiceModel;
+  String tone;
+  String ageGroup;
+  String dialect;
   String presenter;
   String scene;
   String customPrompt;
@@ -172,9 +173,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
     }
   }
 
-  // -------------------------------------------------------------
-  // DIALOG เพิ่มสินค้า พร้อมระบบเลือกรูปจริง
-  // -------------------------------------------------------------
   void _showAddProductDialog() {
     final nameCtrl = TextEditingController();
     final skuCtrl = TextEditingController(text: "SKU-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}");
@@ -208,8 +206,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                   ],
                 ),
                 const SizedBox(height: 10),
-
-                // กล่องเลือกรูปสินค้า
                 GestureDetector(
                   onTap: () async {
                     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
@@ -225,7 +221,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                     decoration: BoxDecoration(
                       color: const Color(0xFFEEF2FF),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF6366F1), style: BorderStyle.solid),
+                      border: Border.all(color: const Color(0xFF6366F1)),
                     ),
                     child: pickedImagePath != null
                         ? ClipRRect(
@@ -243,7 +239,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                           ),
                   ),
                 ),
-
                 const SizedBox(height: 14),
                 TextField(
                   controller: nameCtrl,
@@ -349,8 +344,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: 14),
-
-                      // สลับเปลี่ยนรูปภาพสินค้า
                       Row(
                         children: [
                           Container(
@@ -388,7 +381,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                         ],
                       ),
                       const SizedBox(height: 14),
-
                       Row(
                         children: [
                           Expanded(
@@ -818,7 +810,6 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
                           activeColor: const Color(0xFF4F46E5),
                           onChanged: (val) => setState(() => item.isSelected = val ?? false),
                         ),
-                        // กล่องรูปสินค้าจริง
                         Container(
                           width: 56,
                           height: 56,
@@ -900,7 +891,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
 }
 
 // -------------------------------------------------------------
-// 3. IN-APP AUTOMATION SCREEN (พร้อมแสดงภาพที่เลือกไว้)
+// 3. IN-APP AUTOMATION SCREEN (พร้อม Advanced JS Automation Engine)
 // -------------------------------------------------------------
 
 class InAppAutomationView extends StatefulWidget {
@@ -941,13 +932,13 @@ class _InAppAutomationViewState extends State<InAppAutomationView> {
           onPageStarted: (url) {
             setState(() {
               _isLoadingWeb = true;
-              _botStatus = "กำลังโหลดหน้าเว็บ $url...";
+              _botStatus = "กำลังเปิดหน้าเว็บ $url...";
             });
           },
           onPageFinished: (url) {
             setState(() {
               _isLoadingWeb = false;
-              _botStatus = "พร้อมทำงาน - รอกดส่งคำสั่งเข้าแชต";
+              _botStatus = "หน้าเว็บพร้อมแล้ว - รอกดส่งคำสั่งเข้าบอท";
             });
           },
         ),
@@ -955,39 +946,107 @@ class _InAppAutomationViewState extends State<InAppAutomationView> {
       ..loadRequest(Uri.parse(targetUrl));
   }
 
-  Future<void> _injectPromptToChat() async {
+  // -------------------------------------------------------------
+  // ADVANCED JAVASCRIPT INJECTION (Auto-Type + Dispatch Event + Submit)
+  // -------------------------------------------------------------
+  Future<void> _injectPromptToChat({bool autoSubmit = true}) async {
     final currentItem = widget.items[_currentIndex];
-    final prompt = widget.buildPromptCallback(currentItem);
+    final promptText = widget.buildPromptCallback(currentItem);
 
     setState(() {
-      _botStatus = "กำลังใส่ Prompt สินค้า ${_currentIndex + 1}/${widget.items.length}...";
+      _botStatus = "กำลังสั่งพิมพ์ข้อความลงช่องแชต...";
     });
 
-    await Clipboard.setData(ClipboardData(text: prompt));
+    // สำรองข้อมูลลงคลิปบอร์ดไว้ก่อนเสมอ
+    await Clipboard.setData(ClipboardData(text: promptText));
 
-    const jsScript = """
+    final encodedText = jsonEncode(promptText);
+
+    // สคริปต์ JavaScript จำลองการพิมพ์และจำลองการกดส่ง
+    final jsScript = """
       (function() {
-        var inputs = document.querySelectorAll('textarea, [contenteditable="true"]');
-        if (inputs.length > 0) {
-          inputs[0].focus();
-          return "FOUND_INPUT";
+        var text = $encodedText;
+        var autoSend = ${autoSubmit ? 'true' : 'false'};
+
+        // 1. สแกนหาตัวรับข้อความ (Editor / Textarea / ContentEditable)
+        var inputEl = document.querySelector('div[contenteditable="true"]') ||
+                      document.querySelector('textarea[placeholder*="Ask"], textarea') ||
+                      document.querySelector('input[type="text"]');
+
+        if (!inputEl) {
+          return "ERROR_INPUT_NOT_FOUND";
         }
-        return "INPUT_NOT_FOUND";
+
+        // โฟกัสไปที่กล่องข้อความ
+        inputEl.focus();
+
+        if (inputEl.isContentEditable) {
+          // สำหรับ Rich Text Editor (Meta AI / Flow)
+          inputEl.innerText = text;
+          
+          // ส่ง Events ให้ React / Slate State อัปเดต
+          inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+          inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+        } else {
+          // สำหรับ Textarea / Input ทั่วไป
+          inputEl.value = text;
+          inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+          inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        if (autoSend) {
+          // 2. สแกนหาปุ่มส่ง (Submit/Send button)
+          setTimeout(function() {
+            var sendBtn = document.querySelector('button[aria-label*="Send"], button[aria-label*="ส่ง"]') ||
+                          document.querySelector('button[type="submit"]') ||
+                          document.querySelector('button svg path[d*="M2.01 21L23 12 2.01 3"]')?.closest('button');
+
+            if (sendBtn && !sendBtn.disabled) {
+              sendBtn.click();
+            } else {
+              // ถ้าหาปุ่มไม่เจอ ลองยิง Keyboard Event 'Enter'
+              var enterEvent = new KeyboardEvent('keydown', {
+                key: 'Enter',
+                code: 'Enter',
+                keyCode: 13,
+                which: 13,
+                bubbles: true,
+                cancelable: true
+              });
+              inputEl.dispatchEvent(enterEvent);
+            }
+          }, 400);
+        }
+
+        return "SUCCESS";
       })();
     """;
 
     try {
-      await _webViewController.runJavaScriptReturningResult(jsScript);
-    } catch (_) {}
+      final result = await _webViewController.runJavaScriptReturningResult(jsScript);
+      final resStr = result.toString();
 
-    setState(() {
-      _botStatus = "ใส่ Prompt สำเร็จ! (คัดลอกลงคลิปบอร์ดแล้ว พร้อมส่งรูปและสร้าง)";
-    });
+      if (resStr.contains("SUCCESS")) {
+        setState(() {
+          _botStatus = autoSubmit
+              ? "ส่ง Prompt สำเร็จ! (ส่งคำสั่งเข้าแชตเรียบร้อย)"
+              : "พิมพ์ Prompt ลงช่องเรียบร้อยแล้ว";
+        });
+      } else {
+        setState(() {
+          _botStatus = "ไม่พบช่องพิมพ์ (คัดลอกลงคลิปบอร์ดแล้ว แตะวางด้วยตนเองได้)";
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _botStatus = "คัดลอกลงคลิปบอร์ดแล้ว พร้อมแตะวางในแชต";
+      });
+    }
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("✅ พร้อมส่ง Prompt สำหรับ: ${currentItem.name}"),
+          content: Text("🚀 บอทจัดการ Prompt #${_currentIndex + 1} (${currentItem.name}) แล้ว"),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -1029,7 +1088,6 @@ class _InAppAutomationViewState extends State<InAppAutomationView> {
       ),
       body: Column(
         children: [
-          // Banner Status ด้านบน พร้อมภาพตัวอย่างสินค้าที่กำลังทำอยู่
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             color: const Color(0xFF0F172A),
@@ -1038,7 +1096,6 @@ class _InAppAutomationViewState extends State<InAppAutomationView> {
               children: [
                 Row(
                   children: [
-                    // พรีวิวรูปสินค้าในคิวปัจจุบัน
                     Container(
                       width: 42,
                       height: 42,
@@ -1064,7 +1121,7 @@ class _InAppAutomationViewState extends State<InAppAutomationView> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
-                            "หน่วง: ${widget.globalConfig.delayRange.split(' ')[0]}",
+                            "หน่วงเวลา: ${widget.globalConfig.delayRange.split(' ')[0]}",
                             style: const TextStyle(color: Colors.grey, fontSize: 11),
                           ),
                         ],
@@ -1101,9 +1158,9 @@ class _InAppAutomationViewState extends State<InAppAutomationView> {
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 8),
                         ),
-                        icon: const Icon(Icons.send_rounded, size: 14),
-                        label: const Text("วางคำสั่ง (Inject)", style: TextStyle(fontSize: 12)),
-                        onPressed: _injectPromptToChat,
+                        icon: const Icon(Icons.auto_fix_high, size: 14),
+                        label: const Text("พิมพ์ & สั่งส่งทันที", style: TextStyle(fontSize: 12)),
+                        onPressed: () => _injectPromptToChat(autoSubmit: true),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -1121,8 +1178,6 @@ class _InAppAutomationViewState extends State<InAppAutomationView> {
               ],
             ),
           ),
-
-          // จอ In-App WebView
           Expanded(
             child: Stack(
               children: [
