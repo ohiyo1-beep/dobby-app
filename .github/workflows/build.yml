@@ -16,32 +16,26 @@ jobs:
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: 'temurin'
           java-version: '17'
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.x'
           channel: 'stable'
 
-      - name: Setup Project and Build
+      - name: Recreate Clean Flutter Project
         run: |
-          # บันทึกไฟล์ main.dart ที่เราเขียนไว้
-          mkdir -p /tmp/backup
-          cp lib/main.dart /tmp/backup/main.dart
+          mkdir -p /tmp/my_code
+          cp lib/main.dart /tmp/my_code/main.dart
+          rm -rf * .[!.]*
+          flutter create --org com.dobbystudio --project-name dobby_app app_temp
+          mv app_temp/* app_temp/.[!.]* . 2>/dev/null || true
+          rm -rf app_temp
+          cp /tmp/my_code/main.dart lib/main.dart
 
-          # ลบไฟล์เก่าออกให้หมดเพื่อไม่ให้ flutter create ชนไฟล์เดิม
-          find . -maxdepth 1 ! -name '.' ! -name '..' ! -name '.git' ! -name '.github' -exec rm -rf {} +
-
-          # สร้างโปรเจกต์ใหม่แบบคลีน 100%
-          flutter create --org com.dobbystudio --project-name dobby_app .
-
-          # นำ main.dart ของเรากลับมาใส่แทน
-          cp /tmp/backup/main.dart lib/main.dart
-
-          # ประกอบไฟล์ APK
-          flutter build apk --release
+      - name: Build APK
+        run: flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
