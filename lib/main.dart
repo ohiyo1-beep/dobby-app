@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -19,6 +21,8 @@ void main() {
 
 enum AiEngine { metaAi, flowAi }
 
+enum BotState { idle, injecting, rendering, delaying, completed }
+
 class GlobalConfig {
   int defaultDuration;
   String delayRange;
@@ -37,6 +41,12 @@ class GlobalConfig {
     this.enableRewriteOnError = true,
     this.autoNextProject = false,
   });
+
+  int getMinDelaySeconds() {
+    if (delayRange.contains("2-5")) return 3;
+    if (delayRange.contains("10-20")) return 15;
+    return 7; // ค่าเฉลี่ย 5-10
+  }
 }
 
 class ProductItem {
@@ -891,7 +901,7 @@ class _DobbyStudioAppState extends State<DobbyStudioApp> {
 }
 
 // -------------------------------------------------------------
-// 3. IN-APP AUTOMATION SCREEN (พร้อม Advanced JS Automation Engine)
+// 3. IN-APP AUTOMATION SCREEN (State Machine & Auto-Loop Runner)
 // -------------------------------------------------------------
 
 class InAppAutomationView extends StatefulWidget {
@@ -916,6 +926,12 @@ class _InAppAutomationViewState extends State<InAppAutomationView> {
   late final WebViewController _webViewController;
   int _currentIndex = 0;
   bool _isLoadingWeb = true;
+
+  // State Machine Variables
+  BotState _botState = BotState.idle;
+  bool _isAutoLoopRunning = false;
+  int _countdownTimerSeconds = 0;
+  Timer? _stateTimer;
   String _botStatus = "กำลังเชื่อมต่อระบบ...";
 
   @override
@@ -938,7 +954,7 @@ class _InAppAutomationViewState extends State<InAppAutomationView> {
           onPageFinished: (url) {
             setState(() {
               _isLoadingWeb = false;
-              _botStatus = "หน้าเว็บพร้อมแล้ว - รอกดส่งคำสั่งเข้าบอท";
+              _botStatus = "หน้าเว็บพร้อมแล้ว - กดปุ่ม 'เริ่มรันลูปออโต้' เพื่อเริ่มงาน";
             });
           },
         ),
@@ -946,56 +962,164 @@ class _InAppAutomationViewState extends State<InAppAutomationView> {
       ..loadRequest(Uri.parse(targetUrl));
   }
 
+  @override
+  void dispose() {
+    _stateTimer?.cancel();
+    super.dispose();
+  }
+
   // -------------------------------------------------------------
-  // ADVANCED JAVASCRIPT INJECTION (Auto-Type + Dispatch Event + Submit)
+  // STATE MACHINE CONTROLLER (ถอดแบบสถานะจากคลิป Kubdee AI)
   // -------------------------------------------------------------
+
+  void _toggleAutoLoop() {
+    if (_isAutoLoopRunning) {
+      _stopAutoLoop();
+    } else {
+      _startAutoLoop();
+    }
+  }
+
+  void _startAutoLoop() {
+    setState(() {
+      _isAutoLoopRunning = true;
+    });
+    _executeNextState();
+  }
+
+  void _stopAutoLoop() {
+    _stateTimer?.cancel();
+    setState(() {
+      _isAutoLoopRunning = false;
+      _botState = BotState.idle;
+      _botStatus = "หยุดการทำงานอัตโนมัติชั่วคราว";
+    });
+  }
+
+  Future<void> _executeNextState() async {
+    if (!_isAutoLoopRunning) return;
+
+    if (_currentIndex >= widget.items.length) {
+      setState(() {
+        _isAutoLoopRunning = false;
+        _botState = BotState.completed;
+        _botStatus = "🎉 สร้างวิดีโอครบทุกรายการเรียบร้อยแล้ว!";
+      });
+      return;
+    }
+
+    final currentItem = widget.items[_currentIndex];
+
+    // State 1: สั่งพิมพ์และยิง Submit เข้า AI
+    setState(() {
+      _botState = BotState.injecting;
+      _botStatus = "กำลังป้อน Prompt สินค้า ${_currentIndex + 1}/${widget.items.length}...";
+    });
+
+    await _injectPromptToChat(autoSubmit: true);
+
+    if (!_isAutoLoopRunning) return;
+
+    // State 2: กำลังรอ Thinking & Rendering วิดีโอ
+    final renderWaitTime = max(currentItem.duration + 5, 20); // เวลารอเรนเดอร์สัมพันธ์กับความยาวคลิป
+    _countdownTimerSeconds = renderWaitTime;
+
+    setState(() {
+      _botState = BotState.rendering;
+    });
+
+    _stateTimer?.cancel();
+    _stateTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!_isAutoLoopRunning) {
+        timer.cancel();
+        return;
+      }
+
+      if (_countdownTimerSeconds > 0) {
+        setState(() {
+          _countdownTimerSeconds--;
+          _botStatus = "กำลังรอ Thinking / AI เจนวิดีโอ (รออีก $_countdownTimerSeconds วิ)...";
+        });
+      } else {
+        timer.cancel();
+        _startCoolDownDelay();
+      }
+    });
+  }
+
+  void _startCoolDownDelay() {
+    if (!_isAutoLoopRunning) return;
+
+    // State 3: หน่วงเวลาระหว่างรอบตาม Delay Range
+    _countdownTimerSeconds = widget.globalConfig.getMinDelaySeconds();
+
+    setState(() {
+      _botState = BotState.delaying;
+    });
+
+    _stateTimer?.cancel();
+    _stateTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!_isAutoLoopRunning) {
+        timer.cancel();
+        return;
+      }
+
+      if (_countdownTimerSeconds > 0) {
+        setState(() {
+          _countdownTimerSeconds--;
+          _botStatus = "หน่วงเวลาก่อนเริ่มสินค้าถัดไป ($_countdownTimerSeconds วิ)...";
+        });
+      } else {
+        timer.cancel();
+        // State 4: สลับไปสินค้าถัดไป
+        if (_currentIndex < widget.items.length - 1) {
+          setState(() {
+            _currentIndex++;
+          });
+          _executeNextState();
+        } else {
+          setState(() {
+            _isAutoLoopRunning = false;
+            _botState = BotState.completed;
+            _botStatus = "🎉 สร้างวิดีโอครบทุกรายการเรียบร้อยแล้ว!";
+          });
+        }
+      }
+    });
+  }
+
+  // สคริปต์ JavaScript ยิงคำสั่งเข้าช่องแชต
   Future<void> _injectPromptToChat({bool autoSubmit = true}) async {
     final currentItem = widget.items[_currentIndex];
     final promptText = widget.buildPromptCallback(currentItem);
 
-    setState(() {
-      _botStatus = "กำลังสั่งพิมพ์ข้อความลงช่องแชต...";
-    });
-
-    // สำรองข้อมูลลงคลิปบอร์ดไว้ก่อนเสมอ
     await Clipboard.setData(ClipboardData(text: promptText));
-
     final encodedText = jsonEncode(promptText);
 
-    // สคริปต์ JavaScript จำลองการพิมพ์และจำลองการกดส่ง
     final jsScript = """
       (function() {
         var text = $encodedText;
         var autoSend = ${autoSubmit ? 'true' : 'false'};
 
-        // 1. สแกนหาตัวรับข้อความ (Editor / Textarea / ContentEditable)
         var inputEl = document.querySelector('div[contenteditable="true"]') ||
                       document.querySelector('textarea[placeholder*="Ask"], textarea') ||
                       document.querySelector('input[type="text"]');
 
-        if (!inputEl) {
-          return "ERROR_INPUT_NOT_FOUND";
-        }
+        if (!inputEl) return "ERROR_INPUT_NOT_FOUND";
 
-        // โฟกัสไปที่กล่องข้อความ
         inputEl.focus();
 
         if (inputEl.isContentEditable) {
-          // สำหรับ Rich Text Editor (Meta AI / Flow)
           inputEl.innerText = text;
-          
-          // ส่ง Events ให้ React / Slate State อัปเดต
           inputEl.dispatchEvent(new Event('input', { bubbles: true }));
           inputEl.dispatchEvent(new Event('change', { bubbles: true }));
         } else {
-          // สำหรับ Textarea / Input ทั่วไป
           inputEl.value = text;
           inputEl.dispatchEvent(new Event('input', { bubbles: true }));
           inputEl.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
         if (autoSend) {
-          // 2. สแกนหาปุ่มส่ง (Submit/Send button)
           setTimeout(function() {
             var sendBtn = document.querySelector('button[aria-label*="Send"], button[aria-label*="ส่ง"]') ||
                           document.querySelector('button[type="submit"]') ||
@@ -1004,7 +1128,6 @@ class _InAppAutomationViewState extends State<InAppAutomationView> {
             if (sendBtn && !sendBtn.disabled) {
               sendBtn.click();
             } else {
-              // ถ้าหาปุ่มไม่เจอ ลองยิง Keyboard Event 'Enter'
               var enterEvent = new KeyboardEvent('keydown', {
                 key: 'Enter',
                 code: 'Enter',
@@ -1015,7 +1138,7 @@ class _InAppAutomationViewState extends State<InAppAutomationView> {
               });
               inputEl.dispatchEvent(enterEvent);
             }
-          }, 400);
+          }, 500);
         }
 
         return "SUCCESS";
@@ -1023,44 +1146,24 @@ class _InAppAutomationViewState extends State<InAppAutomationView> {
     """;
 
     try {
-      final result = await _webViewController.runJavaScriptReturningResult(jsScript);
-      final resStr = result.toString();
-
-      if (resStr.contains("SUCCESS")) {
-        setState(() {
-          _botStatus = autoSubmit
-              ? "ส่ง Prompt สำเร็จ! (ส่งคำสั่งเข้าแชตเรียบร้อย)"
-              : "พิมพ์ Prompt ลงช่องเรียบร้อยแล้ว";
-        });
-      } else {
-        setState(() {
-          _botStatus = "ไม่พบช่องพิมพ์ (คัดลอกลงคลิปบอร์ดแล้ว แตะวางด้วยตนเองได้)";
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _botStatus = "คัดลอกลงคลิปบอร์ดแล้ว พร้อมแตะวางในแชต";
-      });
-    }
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("🚀 บอทจัดการ Prompt #${_currentIndex + 1} (${currentItem.name}) แล้ว"),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
+      await _webViewController.runJavaScriptReturningResult(jsScript);
+    } catch (_) {}
   }
 
-  void _nextProduct() {
+  void _manualNext() {
+    _stateTimer?.cancel();
     if (_currentIndex < widget.items.length - 1) {
       setState(() {
         _currentIndex++;
         _botStatus = "สลับไปยังสินค้าตัวถัดไป (${_currentIndex + 1}/${widget.items.length})";
       });
+      if (_isAutoLoopRunning) {
+        _executeNextState();
+      }
     } else {
       setState(() {
+        _isAutoLoopRunning = false;
+        _botState = BotState.completed;
         _botStatus = "🎉 ทำงานครบคิวทั้งหมดแล้ว!";
       });
     }
@@ -1088,6 +1191,7 @@ class _InAppAutomationViewState extends State<InAppAutomationView> {
       ),
       body: Column(
         children: [
+          // Banner Status Bar (มอนิเตอร์สถานะบอทแบบเรียลไทม์)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             color: const Color(0xFF0F172A),
@@ -1097,8 +1201,8 @@ class _InAppAutomationViewState extends State<InAppAutomationView> {
                 Row(
                   children: [
                     Container(
-                      width: 42,
-                      height: 42,
+                      width: 44,
+                      height: 44,
                       decoration: BoxDecoration(
                         color: Colors.white12,
                         borderRadius: BorderRadius.circular(6),
@@ -1116,12 +1220,12 @@ class _InAppAutomationViewState extends State<InAppAutomationView> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            "คิว ${_currentIndex + 1}/${widget.items.length} : ${currentItem.name}",
+                            "รอบ ${_currentIndex + 1}/${widget.items.length} : ${currentItem.name}",
                             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
-                            "หน่วงเวลา: ${widget.globalConfig.delayRange.split(' ')[0]}",
+                            "โหมด: ${currentItem.videoStyle} | ความยาว: ${currentItem.duration}วิ | หน่วง: ${widget.globalConfig.delayRange.split(' ')[0]}",
                             style: const TextStyle(color: Colors.grey, fontSize: 11),
                           ),
                         ],
@@ -1132,46 +1236,73 @@ class _InAppAutomationViewState extends State<InAppAutomationView> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const SizedBox(
+                    SizedBox(
                       width: 12,
                       height: 12,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.greenAccent),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: _isAutoLoopRunning ? Colors.greenAccent : Colors.amberAccent,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         _botStatus,
-                        style: const TextStyle(color: Colors.greenAccent, fontSize: 11, fontFamily: 'monospace'),
+                        style: TextStyle(
+                          color: _isAutoLoopRunning ? Colors.greenAccent : Colors.amberAccent,
+                          fontSize: 11,
+                          fontFamily: 'monospace',
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 Row(
                   children: [
+                    // ปุ่มควบคุมหลัก (Start Auto-Loop / Pause)
                     Expanded(
+                      flex: 2,
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF4F46E5),
+                          backgroundColor: _isAutoLoopRunning ? Colors.redAccent.shade700 : const Color(0xFF4F46E5),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 8),
                         ),
-                        icon: const Icon(Icons.auto_fix_high, size: 14),
-                        label: const Text("พิมพ์ & สั่งส่งทันที", style: TextStyle(fontSize: 12)),
-                        onPressed: () => _injectPromptToChat(autoSubmit: true),
+                        icon: Icon(_isAutoLoopRunning ? Icons.pause_circle_outline : Icons.play_circle_fill, size: 16),
+                        label: Text(
+                          _isAutoLoopRunning ? "พักลูปออโต้ (Pause)" : "🚀 เริ่มรันลูปออโต้",
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: _toggleAutoLoop,
                       ),
                     ),
                     const SizedBox(width: 8),
+                    // ปุ่มพิมพ์คำสั่งทีละครั้ง
+                    Expanded(
+                      flex: 1,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: const BorderSide(color: Colors.white24),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                        onPressed: () => _injectPromptToChat(autoSubmit: true),
+                        child: const Text("พิมพ์ส่งทันที", style: TextStyle(fontSize: 11)),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    // ปุ่มข้ามไปสินค้าถัดไป
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.white12,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
                       ),
-                      onPressed: _nextProduct,
-                      child: const Text("ถัดไป >>", style: TextStyle(fontSize: 12)),
+                      onPressed: _manualNext,
+                      child: const Text("ถัดไป >>", style: TextStyle(fontSize: 11)),
                     ),
                   ],
                 ),
