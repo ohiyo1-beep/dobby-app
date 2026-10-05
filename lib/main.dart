@@ -17,17 +17,11 @@ class ModernStudioApp extends StatefulWidget {
 }
 
 class _ModernStudioAppState extends State<ModernStudioApp> {
-  // สไตล์วิดีโอ: UGC รีวิว หรือ POV
   String _videoStyle = "UGC"; // 'UGC' หรือ 'POV'
-
-  // ความยาวคลิป: 10, 20, 30 วินาที
   int _duration = 20;
-
-  // ภาษา / สำเนียง
-  String _dialect = "กลาง"; // 'กลาง', 'อีสาน', 'เหนือ', 'ใต้'
-
-  // ฉากหลัง
+  String _dialect = "กลาง";
   String _scene = "สตูดิโอมินิมอล";
+
   final List<String> _scenes = [
     "สตูดิโอมินิมอล",
     "ในห้องนั่งเล่น",
@@ -37,7 +31,6 @@ class _ModernStudioAppState extends State<ModernStudioApp> {
     "โรงงาน / หน้าร้าน",
   ];
 
-  // ตัวละคร / คนรีวิว
   String _character = "หญิง (ลุคสดใส)";
   final List<String> _characters = [
     "หญิง (ลุคสดใส)",
@@ -46,21 +39,20 @@ class _ModernStudioAppState extends State<ModernStudioApp> {
     "ชาย (ลุคเป็นกันเอง)",
   ];
 
-  // ข้อมูลสินค้า
   final TextEditingController _prodNameCtrl =
       TextEditingController(text: "กล้องวงจรปิด CCTV ไร้สาย โซลาร์เซลล์ 3 เลนส์ สีดำ");
   final TextEditingController _sellingPointCtrl =
       TextEditingController(text: "คมชัด 4K ติดตั้งง่าย ไม่ต้องเดินสายไฟ แบตอึดตลอดคืน");
 
-  // ฟังก์ชันสลับไปเปิด Meta AI
   Future<void> _openMetaAI() async {
     final Uri url = Uri.parse('https://www.meta.ai');
-    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+    try {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } catch (_) {
       await launchUrl(url, mode: LaunchMode.platformDefault);
     }
   }
 
-  // สร้าง Prompt สไตล์สตูดิโอแบบเรียลไทม์
   String _generatePrompt() {
     final prod = _prodNameCtrl.text.trim();
     final points = _sellingPointCtrl.text.trim();
@@ -93,17 +85,16 @@ class _ModernStudioAppState extends State<ModernStudioApp> {
     final prompt = _generatePrompt();
     Clipboard.setData(ClipboardData(text: prompt));
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Row(
+      const SnackBar(
+        content: Row(
           children: [
             Icon(Icons.check_circle, color: Colors.greenAccent),
             SizedBox(width: 8),
             Text("คัดลอก Prompt สำเร็จ! พร้อมเปิด Meta AI"),
           ],
         ),
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: Color(0xFF1E293B),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
     _openMetaAI();
@@ -116,7 +107,7 @@ class _ModernStudioAppState extends State<ModernStudioApp> {
       appBar: AppBar(
         title: const Text(
           "AI Video Creator Pro",
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, letterSpacing: 0.5),
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
@@ -124,7 +115,7 @@ class _ModernStudioAppState extends State<ModernStudioApp> {
         elevation: 0.5,
         actions: [
           IconButton(
-            icon: const Icon(Icons.open_in_browser_rounded, color: Colors.indigo),
+            icon: const Icon(Icons.open_in_browser, color: Colors.indigo),
             tooltip: "เปิด Meta AI",
             onPressed: _openMetaAI,
           ),
@@ -135,15 +126,12 @@ class _ModernStudioAppState extends State<ModernStudioApp> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. ตัวเลือกสไตล์คลิปแบบ Segmented Control (POV vs UGC)
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
-                ],
-              ],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
               padding: const EdgeInsets.all(4),
               child: Row(
                 children: [
@@ -156,21 +144,15 @@ class _ModernStudioAppState extends State<ModernStudioApp> {
                           color: _videoStyle == "UGC" ? const Color(0xFF6366F1) : Colors.transparent,
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.person_pin_rounded,
-                                size: 18, color: _videoStyle == "UGC" ? Colors.white : Colors.grey.shade600),
-                            const SizedBox(width: 6),
-                            Text(
-                              "UGC รีวิว (มีคนพูด)",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                                color: _videoStyle == "UGC" ? Colors.white : Colors.grey.shade700,
-                              ),
+                        child: Center(
+                          child: Text(
+                            "UGC รีวิว (มีคนพูด)",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: _videoStyle == "UGC" ? Colors.white : Colors.grey.shade700,
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -184,21 +166,15 @@ class _ModernStudioAppState extends State<ModernStudioApp> {
                           color: _videoStyle == "POV" ? const Color(0xFF6366F1) : Colors.transparent,
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.pan_tool_alt_rounded,
-                                size: 18, color: _videoStyle == "POV" ? Colors.white : Colors.grey.shade600),
-                            const SizedBox(width: 6),
-                            Text(
-                              "POV (เห็นเฉพาะมือ)",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                                color: _videoStyle == "POV" ? Colors.white : Colors.grey.shade700,
-                              ),
+                        child: Center(
+                          child: Text(
+                            "POV (เห็นเฉพาะมือ)",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: _videoStyle == "POV" ? Colors.white : Colors.grey.shade700,
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -207,14 +183,12 @@ class _ModernStudioAppState extends State<ModernStudioApp> {
               ),
             ),
             const SizedBox(height: 16),
-
-            // 2. การ์ดตั้งค่าความยาวและสำเนียง
             _buildCard(
               title: "⏱️ ความยาวคลิป & ภาษาสำเนียง",
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("ความยาววิดีโอ", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey)),
+                  const Text("ความยาววิดีโอ", style: TextStyle(fontSize: 12, color: Colors.grey)),
                   const SizedBox(height: 8),
                   Row(
                     children: [10, 20, 30].map((sec) {
@@ -224,14 +198,6 @@ class _ModernStudioAppState extends State<ModernStudioApp> {
                         child: ChoiceChip(
                           label: Text("$sec วินาที"),
                           selected: isSelected,
-                          selectedColor: const Color(0xFFEEF2FF),
-                          labelStyle: TextStyle(
-                            color: isSelected ? const Color(0xFF4F46E5) : Colors.black87,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          ),
-                          side: BorderSide(
-                            color: isSelected ? const Color(0xFF6366F1) : Colors.grey.shade300,
-                          ),
                           onSelected: (val) {
                             if (val) setState(() => _duration = sec);
                           },
@@ -239,8 +205,8 @@ class _ModernStudioAppState extends State<ModernStudioApp> {
                       );
                     }).toList(),
                   ),
-                  const SizedBox(height: 14),
-                  const Text("ภาษาและสำเนียงพูด", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey)),
+                  const SizedBox(height: 12),
+                  const Text("ภาษาและสำเนียงพูด", style: TextStyle(fontSize: 12, color: Colors.grey)),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -249,14 +215,6 @@ class _ModernStudioAppState extends State<ModernStudioApp> {
                       return ChoiceChip(
                         label: Text("ภาษา$d"),
                         selected: isSelected,
-                        selectedColor: const Color(0xFFF3E8FF),
-                        labelStyle: TextStyle(
-                          color: isSelected ? const Color(0xFF7E22CE) : Colors.black87,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                        ),
-                        side: BorderSide(
-                          color: isSelected ? const Color(0xFFA855F7) : Colors.grey.shade300,
-                        ),
                         onSelected: (val) {
                           if (val) setState(() => _dialect = d);
                         },
@@ -267,8 +225,6 @@ class _ModernStudioAppState extends State<ModernStudioApp> {
               ),
             ),
             const SizedBox(height: 14),
-
-            // 3. การ์ดข้อมูลสินค้า
             _buildCard(
               title: "📦 ข้อมูลสินค้าที่ต้องการโปรโมท",
               child: Column(
@@ -276,13 +232,9 @@ class _ModernStudioAppState extends State<ModernStudioApp> {
                   TextField(
                     controller: _prodNameCtrl,
                     onChanged: (_) => setState(() {}),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: "ชื่อสินค้า",
-                      labelStyle: const TextStyle(fontSize: 13),
-                      prefixIcon: const Icon(Icons.shopping_bag_outlined, size: 20),
-                      filled: true,
-                      fillColor: const Color(0xFFF8FAFC),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                      border: OutlineInputBorder(),
                       isDense: true,
                     ),
                   ),
@@ -291,13 +243,9 @@ class _ModernStudioAppState extends State<ModernStudioApp> {
                     controller: _sellingPointCtrl,
                     onChanged: (_) => setState(() {}),
                     maxLines: 2,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: "จุดเด่น / จุดขายสำคัญ",
-                      labelStyle: const TextStyle(fontSize: 13),
-                      prefixIcon: const Icon(Icons.star_outline_rounded, size: 20),
-                      filled: true,
-                      fillColor: const Color(0xFFF8FAFC),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                      border: OutlineInputBorder(),
                       isDense: true,
                     ),
                   ),
@@ -305,36 +253,30 @@ class _ModernStudioAppState extends State<ModernStudioApp> {
               ),
             ),
             const SizedBox(height: 14),
-
-            // 4. การ์ดฉากหลังและตัวละคร (ถ้าเลือกแบบ UGC)
             _buildCard(
               title: "🎬 สภาพแวดล้อมและบรรยากาศ",
               child: Column(
                 children: [
                   DropdownButtonFormField<String>(
                     value: _scene,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: "ฉากหลังของคลิป",
-                      filled: true,
-                      fillColor: const Color(0xFFF8FAFC),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                      border: OutlineInputBorder(),
                       isDense: true,
                     ),
-                    items: _scenes.map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13)))).toList(),
+                    items: _scenes.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
                     onChanged: (val) => setState(() => _scene = val!),
                   ),
                   if (_videoStyle == "UGC") ...[
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String>(
                       value: _character,
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         labelText: "บุคลิกคนรีวิว (ครีเอเตอร์)",
-                        filled: true,
-                        fillColor: const Color(0xFFF8FAFC),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                        border: OutlineInputBorder(),
                         isDense: true,
                       ),
-                      items: _characters.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 13)))).toList(),
+                      items: _characters.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                       onChanged: (val) => setState(() => _character = val!),
                     ),
                   ],
@@ -342,57 +284,40 @@ class _ModernStudioAppState extends State<ModernStudioApp> {
               ),
             ),
             const SizedBox(height: 14),
-
-            // 5. กล่อง Prompt Preview แบบไดนามิก
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: const Color(0xFF0F172A),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.terminal_rounded, color: Colors.greenAccent, size: 16),
-                      SizedBox(width: 6),
-                      Text("Prompt ที่ระบบประกอบให้อัตโนมัติ",
-                          style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
+                  const Text("Prompt ที่สร้างให้อัตโนมัติ:",
+                      style: TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
                   Text(
                     _generatePrompt(),
-                    style: const TextStyle(color: Color(0xFFE2E8F0), fontSize: 11, height: 1.4, fontFamily: 'monospace'),
-                    maxLines: 4,
-                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 11, height: 1.4),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 20),
-
-            // 6. ปุ่ม Action ด้านล่างสุด
+            const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
-              height: 52,
+              height: 50,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF4F46E5),
                   foregroundColor: Colors.white,
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-                icon: const Icon(Icons.auto_awesome, size: 20),
-                label: const Text(
-                  "คัดลอก Prompt แล้วไปเปิด Meta AI",
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                ),
+                icon: const Icon(Icons.copy_rounded),
+                label: const Text("คัดลอก Prompt แล้วไปเปิด Meta AI", style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                 onPressed: _copyPrompt,
               ),
             ),
-            const SizedBox(height: 30),
           ],
         ),
       ),
@@ -405,15 +330,13 @@ class _ModernStudioAppState extends State<ModernStudioApp> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 3)),
-        ],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+          Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           child,
         ],
